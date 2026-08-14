@@ -518,6 +518,11 @@
         <strong>soft-landing phase</strong> where the fixed orifice bleeds the remaining stroke
         at nearly constant force, taking the module from 0.5 m/s down to roughly 0.04 m/s over
         two or three seconds. Peak landing load drops by around 90&nbsp;percent.</p>
+      <p>Both views are drawn to the same conventions. Cut metal is hatched, adjacent parts
+        hatched the other way so the joints read; the rod is left solid because shafts are not
+        sectioned. <strong>Detail A</strong> on the landing view is the leg the enlarged panel
+        refers to, and the panel pairs the cylinder in section with the circuit it is plumbed
+        into &mdash; the same pairing you get full size on the lock tab.</p>
     </div>
 
     <div>
@@ -1061,11 +1066,18 @@ function rr(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function label(ctx, txt, x, y, col, size, align) {
-  ctx.font = (size || 10) + 'px ui-monospace, "DejaVu Sans Mono", monospace';
-  ctx.fillStyle = col;
+function label(ctx, txt, x, y, col, size, align, chip) {
+  const s = size || 10;
+  ctx.font = s + 'px ui-monospace, "DejaVu Sans Mono", monospace';
   ctx.textAlign = align || 'left';
   ctx.textBaseline = 'middle';
+  if (chip) {                       // knock out anything the text sits on top of
+    const tw = ctx.measureText(txt).width;
+    const tx = align === 'center' ? x - tw / 2 : (align === 'right' ? x - tw : x);
+    ctx.fillStyle = chip;
+    ctx.fillRect(tx - 3, y - s * 0.72, tw + 6, s * 1.44);
+  }
+  ctx.fillStyle = col;
   ctx.fillText(txt, x, y);
 }
 
@@ -1100,221 +1112,463 @@ function drawWater(ctx, x, y, w, h, topShade) {
   ctx.restore();
 }
 
-/* -------------------------------------------------------- cutaway view  */
+/* ------------------------------------------------- drawing conventions  */
 
-/* Draws the cylinder in section inside the box {x,y,w,h}. The rod foot stays
-   planted on the anvil and the barrel descends as the damper compresses, which
-   is what actually happens: the load is bolted to the barrel. `detail` adds the
-   valve manifold, gauge and callouts. Returns the barrel geometry so callers
-   can hang a mass off the top of it. */
-function drawCutaway(ctx, box, detail) {
-  const H    = box.h;
-  const cx   = box.x + box.w * (detail ? (box.w < 420 ? 0.29 : 0.36) : 0.5);
-  const barW = Math.min(box.w * (detail ? 0.24 : 0.42), H * 0.19);
-  const wall = Math.max(3, barW * 0.11);
-  const frac = Math.min(1, S.x / STROKE);        // 0 extended, 1 bottomed
+/* Section hatching. Cut metal gets 45-degree lines; adjacent parts are hatched
+   the other way so the joint between them reads, which is the usual convention. */
+function hatch(ctx, x, y, w, h, step, col, dir, alpha) {
+  if (w <= 0.5 || h <= 0.5) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.globalAlpha = alpha === undefined ? 0.55 : alpha;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1;
+  const d = dir === undefined ? 1 : dir;
+  ctx.beginPath();
+  for (let i = -Math.ceil(h / step) - 1; i <= Math.ceil(w / step) + 1; i++) {
+    const x0 = x + i * step;
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + d * h, y + h);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
 
-  // Fixed parts: anvil, foot, rod, piston.
-  const anvilY   = box.y + H * 0.92;
-  const footH    = Math.max(5, H * 0.035);
-  const footTop  = anvilY - footH;
-  const rodLen   = H * 0.34;
-  const pistonH  = Math.max(7, H * 0.05);
-  const pistonB  = footTop - rodLen;
-  const pistonT  = pistonB - pistonH;
+/* Vertical dimension line with witness ticks. Arrowheads flip outboard when the
+   dimension is too short to hold them, same as a real drawing. */
+function dimV(ctx, x, y0, y1, txt, col, side, wit) {
+  const a = Math.min(y0, y1), b = Math.max(y0, y1);
+  ctx.save();
+  ctx.strokeStyle = col; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, a); ctx.lineTo(x, b); ctx.stroke();
+  if (wit) {
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, a); ctx.lineTo(wit, a);
+    ctx.moveTo(x, b); ctx.lineTo(wit, b);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  const out = (b - a) < 16;
+  ctx.fillStyle = col;
+  for (const [yy, s] of [[a, out ? -1 : 1], [b, out ? 1 : -1]]) {
+    ctx.beginPath();
+    ctx.moveTo(x, yy);
+    ctx.lineTo(x - 2.8, yy + s * 6);
+    ctx.lineTo(x + 2.8, yy + s * 6);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  // Dimension text gets an opaque chip so crossing leader lines cannot bury it.
+  const ty = (a + b) / 2;
+  ctx.font = '9px ui-monospace, "DejaVu Sans Mono", monospace';
+  const tw = ctx.measureText(txt).width;
+  ctx.fillStyle = COL.deep;
+  ctx.fillRect(x + side * 5 - (side < 0 ? tw + 3 : 1), ty - 6, tw + 4, 12);
+  label(ctx, txt, x + side * 5, ty, col, 9, side < 0 ? 'right' : 'left');
+}
 
-  // Moving parts: cap chamber shrinks, so the barrel slides down over the rod.
-  const chamFull = H * 0.28;
+/* Leader line from a point on the part out to a label. */
+function leader(ctx, tx, ty, lx, ly, txt, col, left, size) {
+  ctx.save();
+  ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = 0.8;
+  const foot = left ? lx + 7 : lx - 7;
+  ctx.beginPath();
+  ctx.moveTo(tx, ty); ctx.lineTo(foot, ly); ctx.lineTo(lx, ly);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.arc(tx, ty, 1.7, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  label(ctx, txt, lx + (left ? -4 : 4), ly, col, size || 9, left ? 'right' : 'left');
+}
+
+/* ------------------------------------------------------ cylinder section */
+
+/* A sectional elevation of one damper leg. The rod foot stays planted and the
+   barrel slides down over it as the damper compresses, because the load is
+   bolted to the barrel, not to the rod.
+
+   Returns geometry so callers can hang a mass off the mounting flange and pipe
+   the cap port into a circuit diagram. */
+function drawCylinderSection(ctx, box, opts) {
+  const H     = box.h;
+  const full  = opts.full;                       // room for dimensions + callouts
+  const cx    = box.x + box.w * (full ? 0.66 : 0.50);
+  const barW  = Math.min(box.w * (full ? 0.30 : 0.40), H * (full ? 0.20 : 0.155));
+  const wall  = Math.max(3.5, barW * 0.13);
+  const bore  = barW - 2 * wall;
+  const rodW  = bore * 0.5;                      // 90 mm rod in a 180 mm bore
+  const frac  = Math.min(1, S.x / STROKE);
+
+  /* --- planted: anvil, foot, rod, piston --- */
+  const anvilY  = box.y + H * 0.94;
+  const footH   = Math.max(5, H * 0.032);
+  const footTop = anvilY - footH;
+  const rodLen  = H * 0.28;
+  const pistonH = Math.max(8, H * 0.050);
+  const pistonB = footTop - rodLen;
+  const pistonT = pistonB - pistonH;
+
+  /* --- riding on the water: barrel, end caps, mounting --- */
+  const chamFull = H * 0.18;
   const cham     = chamFull * (1 - frac);
-  const barTop   = pistonT - cham - wall;
-  const barH     = 2 * wall + chamFull + pistonH;
-  const inner    = barW - 2 * wall;
+  const capH     = Math.max(6, H * 0.050);       // cap end cap
+  const glandH   = Math.max(6, H * 0.048);       // rod gland
+  const barTop   = pistonT - cham - capH;
+  const barBot   = pistonB + (chamFull - cham) + glandH;
+  const flangeH  = Math.max(5, H * 0.038);
+  const flangeTop= barTop - flangeH;
 
-  // anvil
-  ctx.fillStyle = '#0e2b36';
-  ctx.fillRect(box.x + box.w * 0.04, anvilY, box.w * (detail ? 0.62 : 0.92), H * 0.07);
+  const pn = Math.min(1, Math.max(0, S.p / 3.0e7));
+
+  /* --- anvil --- */
+  ctx.fillStyle = '#0d2833';
+  ctx.fillRect(box.x + box.w * 0.04, anvilY, box.w * (full ? 0.70 : 0.92), H * 0.06);
+  hatch(ctx, box.x + box.w * 0.04, anvilY, box.w * (full ? 0.70 : 0.92), H * 0.06,
+        7, COL.steel, -1, 0.35);
   ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
   ctx.strokeRect(box.x + box.w * 0.04 + 0.5, anvilY + 0.5,
-                 box.w * (detail ? 0.62 : 0.92) - 1, H * 0.07 - 1);
+                 box.w * (full ? 0.70 : 0.92) - 1, H * 0.06 - 1);
 
-  // rod and foot
-  const rodW = inner * 0.5;
-  ctx.fillStyle = '#7d9aa8';
+  /* --- rod: shafts are never hatched in section --- */
+  ctx.fillStyle = '#8aa7b4';
   ctx.fillRect(cx - rodW / 2, pistonB, rodW, footTop - pistonB);
-  ctx.fillStyle = COL.steelL;
-  rr(ctx, cx - barW * 0.58, footTop, barW * 1.16, footH, 2);
-  ctx.fill();
+  ctx.strokeStyle = '#5c7d8c'; ctx.lineWidth = 1;
+  ctx.strokeRect(cx - rodW / 2 + 0.5, pistonB, rodW - 1, footTop - pistonB);
 
-  // Bolts, when the foot is fixed down and the cylinder can carry tension.
-  if (twoWay()) {
+  /* --- foot --- */
+  ctx.fillStyle = COL.steel;
+  ctx.fillRect(cx - barW * 0.60, footTop, barW * 1.20, footH);
+  hatch(ctx, cx - barW * 0.60, footTop, barW * 1.20, footH, 6, COL.steelL, 1, 0.5);
+  ctx.strokeStyle = COL.steelL;
+  ctx.strokeRect(cx - barW * 0.60 + 0.5, footTop + 0.5, barW * 1.20 - 1, footH - 1);
+  if (twoWay()) {                                 // hold-down bolts
     ctx.fillStyle = COL.safety;
     for (const s of [-1, 1]) {
-      ctx.fillRect(cx + s * barW * 0.44 - 1.5, footTop + footH * 0.15,
-                   3, footH * 0.7 + (anvilY - footTop - footH) + H * 0.02);
+      ctx.fillRect(cx + s * barW * 0.46 - 1.6, footTop - H * 0.012,
+                   3.2, footH + H * 0.035);
+      ctx.fillRect(cx + s * barW * 0.46 - 3.4, footTop - H * 0.012, 6.8, 3);
     }
   }
 
-  // head-side volume (below piston, vented to sea)
+  /* --- head-side volume, open to the sea --- */
   ctx.fillStyle = '#0a2733';
-  ctx.fillRect(cx - inner / 2, pistonB, inner, (barTop + barH - wall) - pistonB);
+  ctx.fillRect(cx - bore / 2, pistonB, bore, (barBot - glandH) - pistonB);
 
-  // cap chamber water, tinted by pressure
-  const pn = Math.min(1, Math.max(0, S.p / 3.0e7));
+  /* --- cap chamber: the working water --- */
   const wg = ctx.createLinearGradient(0, barTop, 0, pistonT);
   wg.addColorStop(0, '#0d4b63');
   wg.addColorStop(1, pn > 0.02 ? mix('#0d4b63', '#ff8a2e', pn * 0.8) : '#0d4b63');
   ctx.fillStyle = wg;
-  ctx.fillRect(cx - inner / 2, barTop + wall, inner, Math.max(0, cham));
-
-  // barrel walls
-  ctx.fillStyle = COL.steelD;
-  ctx.fillRect(cx - barW / 2, barTop, wall, barH);
-  ctx.fillRect(cx + barW / 2 - wall, barTop, wall, barH);
-  ctx.fillRect(cx - barW / 2, barTop, barW, wall);
-  ctx.fillRect(cx - barW / 2, barTop + barH - wall, barW, wall);
-  ctx.strokeStyle = COL.steel; ctx.lineWidth = 1;
-  ctx.strokeRect(cx - barW / 2 + 0.5, barTop + 0.5, barW - 1, barH - 1);
-
-  // piston
-  ctx.fillStyle = COL.steelL;
-  ctx.fillRect(cx - inner / 2, pistonT, inner, pistonH);
-  ctx.fillStyle = COL.steelD;
-  for (let i = 1; i < 4; i++) {
-    ctx.fillRect(cx - inner / 2, pistonT + pistonH * i / 4 - 1, inner, 1.5);
-  }
-
-  const geo = { cx: cx, barTop: barTop, barW: barW, barH: barH, anvilY: anvilY };
-  if (!detail) return geo;
-
-  /* ---- valve manifold: fixed on the page, piped to the moving cap port ---- */
-  const mw = box.w * 0.30;
-  const mx = box.x + box.w * 0.62;
-  const my = box.y + H * 0.20;
-  const mh = H * 0.42;
-  const tight = mw < 130;
-
-  const portY = barTop + wall * 1.7;
-  const elbowX = mx - mw * 0.22;
-  ctx.strokeStyle = COL.steel;
-  ctx.lineWidth = Math.max(3, H * 0.013);
-  ctx.beginPath();
-  ctx.moveTo(cx + barW / 2 - wall, portY);
-  ctx.lineTo(elbowX, portY);
-  ctx.lineTo(elbowX, my + mh * 0.16);
-  ctx.lineTo(mx, my + mh * 0.16);
-  ctx.stroke();
-
-  // The port block sits on the cylinder itself, upstream of the manifold.
-  const bx0 = cx + barW / 2 + (elbowX - cx - barW / 2) * 0.30;
-  drawValveSym(ctx, 'block', bx0, portY, Math.min(9, H * 0.030),
-               !S.lock, S.lock ? COL.alarm : COL.sonar);
-
-  // Live flow direction and rate in the line.
-  const vLine = S.q / A_LINE;
-  if (Math.abs(vLine) > 0.03) {
-    const dir = vLine > 0 ? 1 : -1;
-    const x0 = bx0 + Math.min(26, H * 0.09), x1 = elbowX - 6;
+  ctx.fillRect(cx - bore / 2, barTop + capH, bore, Math.max(0, cham));
+  if (S.cav && cham > 3) {                        // boiling at the vapour point
     ctx.save();
-    ctx.globalAlpha = Math.min(1, 0.35 + Math.abs(vLine) / 4);
-    ctx.strokeStyle = COL.ice; ctx.lineWidth = 1.6;
-    for (let i = 0; i < 3; i++) {
-      const ph = ((S.t * 3 + i / 3) % 1);
-      const ax = dir > 0 ? x0 + ph * (x1 - x0) : x1 - ph * (x1 - x0);
+    for (let i = 0; i < 7; i++) {
+      const bx = cx - bore / 2 + ((i * 37 + S.t * 60) % bore);
       ctx.beginPath();
-      ctx.moveTo(ax - dir * 5, portY - 4);
-      ctx.lineTo(ax, portY);
-      ctx.lineTo(ax - dir * 5, portY + 4);
-      ctx.stroke();
+      ctx.arc(bx, barTop + capH + ((i * 23 + S.t * 90) % Math.max(1, cham)), 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
     }
     ctx.restore();
   }
-  if (!tight) {
-    label(ctx, 'LINE ' + lineLen().toFixed(1) + ' m  ·  ' + vLine.toFixed(1) + ' m/s',
-          (bx0 + elbowX) / 2, portY + Math.max(13, H * 0.042),
-          Math.abs(vLine) > 0.1 ? COL.ice : COL.dim, 9, 'center');
+
+  /* --- barrel tube --- */
+  const steelParts = [
+    [cx - barW / 2, barTop + capH, wall, barBot - glandH - barTop - capH],   // left wall
+    [cx + barW / 2 - wall, barTop + capH, wall, barBot - glandH - barTop - capH],
+    [cx - barW / 2, barTop, barW, capH],                                     // cap end cap
+    [cx - barW / 2, barBot - glandH, barW, glandH]                           // rod gland
+  ];
+  for (const r of steelParts) {
+    ctx.fillStyle = COL.steelD;
+    ctx.fillRect(r[0], r[1], r[2], r[3]);
+    hatch(ctx, r[0], r[1], r[2], r[3], 5.5, COL.steel, 1, 0.75);
+    ctx.strokeStyle = COL.steel; ctx.lineWidth = 1;
+    ctx.strokeRect(r[0] + 0.5, r[1] + 0.5, r[2] - 1, r[3] - 1);
   }
 
-  ctx.fillStyle = COL.panel;
-  ctx.strokeStyle = COL.line;
-  ctx.lineWidth = 1;
-  rr(ctx, mx, my, mw, mh, 3);
-  ctx.fill(); ctx.stroke();
+  /* --- mounting flange to the load --- */
+  ctx.fillStyle = COL.steel;
+  ctx.fillRect(cx - barW * 0.75, flangeTop, barW * 1.5, flangeH);
+  hatch(ctx, cx - barW * 0.75, flangeTop, barW * 1.5, flangeH, 6, COL.steelL, -1, 0.5);
+  ctx.strokeStyle = COL.steelL; ctx.lineWidth = 1;
+  ctx.strokeRect(cx - barW * 0.75 + 0.5, flangeTop + 0.5, barW * 1.5 - 1, flangeH - 1);
+
+  /* --- piston, hatched the other way so the joint reads --- */
+  ctx.fillStyle = COL.steel;
+  ctx.fillRect(cx - bore / 2, pistonT, bore, pistonH);
+  hatch(ctx, cx - bore / 2, pistonT, bore, pistonH, 5.5, COL.steelL, -1, 0.7);
+  ctx.strokeStyle = COL.steelL; ctx.lineWidth = 1;
+  ctx.strokeRect(cx - bore / 2 + 0.5, pistonT + 0.5, bore - 1, pistonH - 1);
+
+  /* --- seals: piston seals, wear ring, rod seal and scraper --- */
+  const sealW = Math.max(2.5, bore * 0.10);
+  ctx.fillStyle = '#02090d';
+  // Seal rings sit in grooves at the sliding faces, so in section they appear
+  // at the edges of the piston and around the rod, never across the middle.
+  const sealH = Math.max(3, pistonH * 0.22);
+  const seals = [
+    [cx - bore / 2, pistonT + pistonH * 0.14, sealW, sealH],         // piston seals
+    [cx + bore / 2 - sealW, pistonT + pistonH * 0.14, sealW, sealH],
+    [cx - bore / 2, pistonT + pistonH * 0.62, sealW, sealH],
+    [cx + bore / 2 - sealW, pistonT + pistonH * 0.62, sealW, sealH],
+    [cx - rodW / 2 - sealW, barBot - glandH * 0.72, sealW, glandH * 0.30],
+    [cx + rodW / 2, barBot - glandH * 0.72, sealW, glandH * 0.30],   // rod seal
+    [cx - rodW / 2 - sealW, barBot - glandH * 0.30, sealW, glandH * 0.22],
+    [cx + rodW / 2, barBot - glandH * 0.30, sealW, glandH * 0.22]    // scraper
+  ];
+  for (const s of seals) { ctx.fillRect(s[0], s[1], s[2], s[3]); }
+  ctx.strokeStyle = COL.sonar; ctx.lineWidth = 0.8; ctx.globalAlpha = 0.5;
+  for (const s of seals) { ctx.strokeRect(s[0] + 0.5, s[1] + 0.5, s[2] - 1, s[3] - 1); }
+  ctx.globalAlpha = 1;
+
+  /* --- cap port boss, and the sea vent on the head side --- */
+  const portY = barTop + capH * 0.5;
+  ctx.fillStyle = COL.steelD;
+  ctx.fillRect(cx + barW / 2, portY - capH * 0.22, barW * 0.34, capH * 0.44);
+  ctx.strokeStyle = COL.steel; ctx.lineWidth = 1;
+  ctx.strokeRect(cx + barW / 2 + 0.5, portY - capH * 0.22 + 0.5, barW * 0.34 - 1, capH * 0.44 - 1);
+
+  const ventY = barBot - glandH - Math.max(5, H * 0.022);
+  ctx.fillStyle = COL.steelD;
+  ctx.fillRect(cx - barW / 2 - barW * 0.30, ventY - 3, barW * 0.30, 6);
+  ctx.strokeStyle = COL.steel;
+  ctx.strokeRect(cx - barW / 2 - barW * 0.30 + 0.5, ventY - 2.5, barW * 0.30 - 1, 5);
+
+  const geo = {
+    cx: cx, barW: barW, bore: bore, wall: wall,
+    flangeTop: flangeTop, barTop: barTop, barBot: barBot,
+    portX: cx + barW / 2 + barW * 0.34, portY: portY,
+    anvilY: anvilY, pistonT: pistonT, pistonB: pistonB,
+    capTop: barTop + capH, cham: cham, chamFull: chamFull, glandH: glandH
+  };
+  if (!full) {
+    // Compact panel: no room for leaders, but the parts still get named.
+    const mx2 = cx - barW / 2 - 6;
+    if (cham > 9) label(ctx, 'CAP VOL', mx2, barTop + capH + cham / 2, COL.ice, 8, 'right');
+    label(ctx, 'PISTON', mx2, pistonT + pistonH / 2, COL.dim, 8, 'right');
+    label(ctx, 'ROD', mx2, pistonB + (footTop - pistonB) * 0.5, COL.dim, 8, 'right');
+    label(ctx, twoWay() ? 'BOLTED' : 'FOOT', mx2, footTop + footH / 2,
+          twoWay() ? COL.safety : COL.dim, 8, 'right');
+    return geo;
+  }
+
+  /* --- dimensions, in their own column just left of the barrel --- */
+  const dxTot = cx - barW / 2 - 46;
+  const dxUse = cx - barW / 2 - 20;
+  const strokeTop = pistonT - chamFull;
+  dimV(ctx, dxTot, strokeTop, pistonT, '600', COL.dim, -1, cx - barW / 2);
+  if (S.x > 0.0005) {
+    dimV(ctx, dxUse, strokeTop, strokeTop + chamFull * frac,
+         (S.x * 1000).toFixed(S.x < 0.02 ? 2 : 0), COL.sonar, -1, cx - barW / 2);
+  }
+  label(ctx, 'STROKE / USED mm', dxTot - 4, strokeTop - 12, COL.dim, 8.5, 'center', COL.deep);
+
+  /* --- callouts, spread so the labels never sit on top of each other --- */
+  const lx = box.x + box.w * 0.34;
+  const calls = [
+    { tx: cx, ty: flangeTop + flangeH * 0.5, y: flangeTop + flangeH * 0.5,
+      txt: 'MOUNTING TO LOAD', col: COL.dim },
+    { tx: cx - bore * 0.22, ty: barTop + capH + Math.max(2, cham * 0.5),
+      y: barTop + capH + Math.max(2, cham * 0.5),
+      txt: 'CAP VOLUME — WORKING WATER', col: pn > 0.25 ? COL.safety : COL.ice },
+    { tx: cx - bore * 0.30, ty: pistonT + pistonH * 0.16 + sealW / 2,
+      y: pistonT + pistonH * 0.5, txt: 'PISTON SEALS', col: COL.dim },
+    { tx: cx - bore * 0.30, ty: pistonB + (barBot - glandH - pistonB) * 0.5,
+      y: pistonB + (barBot - glandH - pistonB) * 0.5,
+      txt: 'HEAD SIDE — OPEN TO SEA', col: COL.dim },
+    { tx: cx - barW / 2 - barW * 0.15, ty: ventY, y: ventY, txt: 'SEA VENT', col: COL.dim },
+    { tx: cx - rodW / 2 - sealW / 2, ty: barBot - glandH * 0.6,
+      y: barBot - glandH * 0.4, txt: 'GLAND, ROD SEAL + SCRAPER', col: COL.dim },
+    { tx: cx - barW * 0.30, ty: footTop + footH / 2, y: footTop + footH / 2,
+      txt: twoWay() ? 'FOOT BOLTED DOWN' : 'FOOT RESTING ON ANVIL',
+      col: twoWay() ? COL.safety : COL.dim }
+  ];
+  calls.sort(function (a, b) { return a.y - b.y; });
+  let prev = -1e9;
+  for (const c of calls) {
+    c.y = Math.max(c.y, prev + 15);
+    prev = c.y;
+    leader(ctx, c.tx, c.ty, lx, c.y, c.txt, c.col, true);
+  }
+
+  leader(ctx, cx + barW / 2 + barW * 0.17, portY, cx + barW / 2 + barW * 0.9,
+         portY + H * 0.055, 'CAP PORT', COL.ice, false);
+
+  /* --- bore and rod diameters --- */
+  const dy = barTop + capH + Math.max(7, H * 0.020);
+  ctx.strokeStyle = COL.dim; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - bore / 2, dy); ctx.lineTo(cx + bore / 2, dy);
+  ctx.stroke();
+  ctx.fillStyle = COL.dim;
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + s * bore / 2, dy);
+    ctx.lineTo(cx + s * (bore / 2 - 6), dy - 2.6);
+    ctx.lineTo(cx + s * (bore / 2 - 6), dy + 2.6);
+    ctx.closePath(); ctx.fill();
+  }
+  label(ctx, 'BORE 180', cx, dy + 9, COL.dim, 8.5, 'center');
+  label(ctx, 'ROD 90', cx, pistonB + (footTop - pistonB) * 0.55, COL.deep, 8.5, 'center');
+
+  return geo;
+}
+
+/* ------------------------------------------------------ circuit diagram  */
+
+/* The valve arrangement drawn as a circuit rather than a legend, because the
+   topology is the point: the port block sits in series on the cylinder port, so
+   shutting it isolates everything downstream, while metering, relief and refill
+   hang in parallel off the manifold and discharge to the sea. */
+function drawCircuit(ctx, box, big) {
+  const x0 = box.x, y0 = box.y, w = box.w, h = box.h;
+  const cx = x0 + w * 0.42;
+  const yPort  = y0 + h * 0.06;                 // from the cylinder cap port
+  const yBlock = y0 + h * 0.22;                 // port block
+  const yRail  = y0 + h * 0.44;                 // manifold rail
+  const ySym   = y0 + h * 0.60;                 // parallel branches
+  const yRet   = y0 + h * 0.80;                 // return rail
+  const ySea   = y0 + h * 0.90;
+
+  const bx = [x0 + w * 0.16, x0 + w * 0.42, x0 + w * 0.68];
+  const symS = Math.min(big ? 13 : 8, h * 0.045);
 
   const mA = meterArea();
-  const rows = [
-    { sym: 'block',
-      name: tight ? 'PORT BLOCK' : 'PORT BLOCK — 2x PILOT CHECK',
-      open: !S.lock,
-      note: S.lock ? (tight ? 'shut' : 'shut both ways') : (tight ? 'open' : 'passing') },
-    { sym: 'needle',
-      name: tight ? 'METERING' : 'METERING VALVE',
-      open: !S.lock && mA > leakArea() * 1.5,
-      note: S.mode === 'bench'
-              ? (tight ? (S.vpos * 100).toFixed(0) + ' %'
-                       : (S.vpos * 100).toFixed(0) + ' % · ' + (mA * 1e6).toFixed(1) + ' mm2')
-              : P.orifice.toFixed(1) + ' mm' },
-    { sym: 'relief',
-      name: tight ? 'RELIEF' : 'RELIEF VALVE',
-      open: !S.lock && S.p > reliefSet(),
-      note: S.lock ? 'isolated' : (reliefSet() / 1e5).toFixed(0) + ' bar' }
-  ];
-  const fs = tight ? 9 : 10;
-  const rh = mh / 3;
-  rows.forEach(function (r, i) {
-    const ry = my + rh * i;
-    ctx.strokeStyle = COL.line;
-    if (i) { ctx.beginPath(); ctx.moveTo(mx, ry); ctx.lineTo(mx + mw, ry); ctx.stroke(); }
-    const col = r.open ? COL.sonar : (r.sym === 'block' && S.lock ? COL.alarm : COL.dim);
-    drawValveSym(ctx, r.sym, mx + 16, ry + rh / 2, Math.min(11, rh * 0.32), r.open, col);
-    label(ctx, r.name, mx + 32, ry + rh / 2 - 6, r.open ? COL.chalk : COL.dim, fs);
-    label(ctx, r.note, mx + 32, ry + rh / 2 + 7, col, fs);
-  });
+  const meterOpen  = !S.lock && mA > leakArea() * 1.5;
+  const reliefOpen = !S.lock && S.p > reliefSet();
+  const checkOpen  = !S.lock && S.p < -2e4;
+  const live = [meterOpen && Math.abs(S.q) > 1e-5, reliefOpen, checkOpen];
+  const anyFlow = !S.lock && (Math.abs(S.q) > 1e-5 || reliefOpen || checkOpen);
 
-  /* ---- jets leaving the metered port ---- */
-  const jx = mx + mw;
-  const jy = my + rh * 0.5;
-  if (S.jet > 0.02) {
+  function pipe(ax, ay, bx2, by, on, rev) {
+    ctx.strokeStyle = on ? COL.sonar : (S.lock ? COL.line : COL.lineHi);
+    ctx.lineWidth = on ? 2.2 : 1.6;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx2, by); ctx.stroke();
+    if (!on) return;
+    const len = Math.hypot(bx2 - ax, by - ay);
+    if (len < 8) return;
+    const ux = (bx2 - ax) / len, uy = (by - ay) / len;
+    const d = rev ? -1 : 1;
+    ctx.save();
+    ctx.fillStyle = COL.sonar;
+    for (let i = 0; i < Math.max(1, Math.round(len / 26)); i++) {
+      let ph = ((S.t * 1.6 + i / Math.max(1, Math.round(len / 26))) % 1);
+      if (d < 0) ph = 1 - ph;
+      const px = ax + ux * ph * len, py = ay + uy * ph * len;
+      ctx.beginPath();
+      ctx.moveTo(px + d * ux * 4, py + d * uy * 4);
+      ctx.lineTo(px - d * ux * 2 - uy * 3, py - d * uy * 2 + ux * 3);
+      ctx.lineTo(px - d * ux * 2 + uy * 3, py - d * uy * 2 - ux * 3);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function dot(x, y, on) {
+    ctx.fillStyle = on ? COL.sonar : COL.lineHi;
+    ctx.beginPath(); ctx.arc(x, y, 2.8, 0, Math.PI * 2); ctx.fill();
+  }
+
+  const outward = S.q > 0;
+
+  // cap port down into the port block
+  if (!big) label(ctx, 'FROM CAP PORT', cx, yPort - 9, COL.ice, 8.5, 'center');
+  pipe(cx, yPort, cx, yBlock - symS * 1.5, anyFlow, !outward);
+
+  /* --- port block: two pilot-operated checks, one per direction --- */
+  const pbw = big ? w * 0.44 : w * 0.56, pbh = symS * 3.0;
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = S.lock ? COL.alarm : COL.dim; ctx.lineWidth = 1;
+  ctx.strokeRect(cx - pbw / 2, yBlock - pbh / 2, pbw, pbh);
+  ctx.setLineDash([]);
+  drawValveSym(ctx, 'block', cx, yBlock, symS, !S.lock, S.lock ? COL.alarm : COL.sonar);
+  // pilot line, the thing that makes it releasable
+  ctx.setLineDash([2, 3]);
+  ctx.strokeStyle = S.lock ? COL.alarm : COL.dim;
+  ctx.beginPath();
+  ctx.moveTo(cx - pbw / 2, yBlock); ctx.lineTo(cx - pbw / 2 - (big ? 16 : 8), yBlock);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (big) {
+    label(ctx, 'PORT BLOCK', cx + pbw / 2 + 8, yBlock - 7,
+          S.lock ? COL.alarm : COL.chalk, 9.5);
+    label(ctx, S.lock ? '2x PILOT CHECK — SHUT' : '2x PILOT CHECK — PASSING',
+          cx + pbw / 2 + 8, yBlock + 6, S.lock ? COL.alarm : COL.sonar, 9);
+    label(ctx, 'PILOT', cx - pbw / 2 - 20, yBlock, COL.dim, 8, 'right');
+  }
+
+  pipe(cx, yBlock + pbh / 2, cx, yRail, anyFlow, !outward);
+
+  /* --- manifold rail and the three parallel branches --- */
+  pipe(bx[0], yRail, bx[2], yRail, anyFlow && !S.lock, false);
+  for (let i = 0; i < 3; i++) {
+    dot(bx[i], yRail, live[i]);
+    pipe(bx[i], yRail, bx[i], ySym - symS * 1.4, live[i], i === 2);
+    pipe(bx[i], ySym + symS * 1.4, bx[i], yRet, live[i], i === 2);
+    dot(bx[i], yRet, live[i]);
+  }
+  pipe(bx[0], yRet, bx[2], yRet, anyFlow && !S.lock, false);
+
+  const cols = [
+    live[0] ? COL.sonar : COL.dim,
+    live[1] ? COL.alarm : COL.dim,
+    live[2] ? COL.sonar : COL.dim
+  ];
+  drawValveSym(ctx, 'needle', bx[0], ySym, symS, meterOpen, cols[0]);
+  drawValveSym(ctx, 'relief', bx[1], ySym, symS, reliefOpen, cols[1]);
+  drawValveSym(ctx, 'check',  bx[2], ySym, symS, checkOpen,  cols[2]);
+
+  if (big) {
+    const names = [
+      ['METERING', S.mode === 'bench'
+        ? (S.vpos * 100).toFixed(0) + ' % · ' + (mA * 1e6).toFixed(1) + ' mm2'
+        : P.orifice.toFixed(1) + ' mm fixed'],
+      ['RELIEF', (reliefSet() / 1e5).toFixed(0) + ' bar'],
+      ['REFILL', 'one way in']
+    ];
+    for (let i = 0; i < 3; i++) {
+      label(ctx, names[i][0], bx[i], ySym + symS * 1.4 + 13, cols[i], 9, 'center');
+      label(ctx, names[i][1], bx[i], ySym + symS * 1.4 + 24,
+            S.lock ? COL.dim : COL.mist, 8.5, 'center');
+    }
+  } else {
+    const shortNames = ['ORIFICE', 'RELIEF', 'REFILL'];
+    for (let i = 0; i < 3; i++) {
+      label(ctx, shortNames[i], bx[i], ySym + symS * 1.4 + 11, cols[i], 8, 'center');
+    }
+    label(ctx, S.lock ? 'BLOCK SHUT' : 'PORT BLOCK', cx, yBlock - symS * 2.1,
+          S.lock ? COL.alarm : COL.dim, 8, 'center', COL.deep);
+    label(ctx, 'TO SEA', cx + symS * 1.4, ySea + 2, COL.dim, 8);
+  }
+
+  /* --- sea return --- */
+  pipe(cx, yRet, cx, ySea - 4, anyFlow && !S.lock, !outward);
+  ctx.strokeStyle = anyFlow && !S.lock ? COL.ice : COL.lineHi;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(cx - symS * 1.1, ySea - 4);
+  ctx.lineTo(cx, ySea + symS * 0.7);
+  ctx.lineTo(cx + symS * 1.1, ySea - 4);
+  ctx.stroke();
+  if (big) label(ctx, 'TO SEA — ' + (P_AMB / 1e5).toFixed(0) + ' bar AMBIENT',
+                 cx + symS * 1.6, ySea, COL.dim, 9);
+
+  // jets at the discharge while water is actually leaving
+  if (S.jet > 0.02 && !S.lock) {
     ctx.save();
     ctx.globalAlpha = Math.min(1, S.jet);
-    for (let i = 0; i < 10; i++) {
-      const ph = (S.t * 2.2 + i * 0.1) % 1;
-      const len = box.w * 0.09 * S.jet;
+    for (let i = 0; i < 8; i++) {
+      const ph = (S.t * 2.2 + i * 0.12) % 1;
       ctx.beginPath();
-      ctx.arc(jx + ph * len + 4, jy + Math.sin(i * 2.1 + S.t * 6) * 5 * ph, 2.6 * (1 - ph) + 0.6, 0, Math.PI * 2);
+      ctx.arc(cx + Math.sin(i * 2.3) * 9 * ph, ySea + symS * 0.7 + ph * h * 0.07,
+              2.4 * (1 - ph) + 0.6, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(111,182,221,' + (0.8 * (1 - ph)) + ')';
       ctx.fill();
     }
     ctx.restore();
   }
-
-  /* ---- gauge ---- */
-  const gx = mx + mw * 0.5, gy = my + mh + H * 0.14, gr = Math.min(box.w * 0.075, H * 0.10);
-  ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI * 2);
-  ctx.fillStyle = COL.deep; ctx.fill();
-  ctx.strokeStyle = COL.lineHi; ctx.lineWidth = 1.5; ctx.stroke();
-  const pmax = 6e7;
-  const frac2 = Math.min(1, Math.max(0, S.p / pmax));
-  const a0 = Math.PI * 0.78, a1 = Math.PI * 2.22;
-  ctx.beginPath(); ctx.arc(gx, gy, gr - 4, a0, a1);
-  ctx.strokeStyle = COL.line; ctx.lineWidth = 2.5; ctx.stroke();
-  ctx.beginPath(); ctx.arc(gx, gy, gr - 4, a0, a0 + (a1 - a0) * frac2);
-  ctx.strokeStyle = frac2 > 0.66 ? COL.alarm : COL.safety; ctx.lineWidth = 2.5; ctx.stroke();
-  const ang = a0 + (a1 - a0) * frac2;
-  ctx.beginPath(); ctx.moveTo(gx, gy);
-  ctx.lineTo(gx + Math.cos(ang) * (gr - 7), gy + Math.sin(ang) * (gr - 7));
-  ctx.strokeStyle = COL.chalk; ctx.lineWidth = 1.6; ctx.stroke();
-  label(ctx, (S.p / 1e5).toFixed(0), gx, gy + gr + 11, COL.mist, 10, 'center');
-  label(ctx, 'bar', gx, gy + gr + 22, COL.dim, 8.5, 'center');
-
-  /* ---- callouts (need clear space to the left of the barrel) ---- */
-  if (box.w > 380) {
-    if (cham > 12) label(ctx, 'CAP VOLUME', cx - barW / 2 - 8, barTop + wall + cham / 2, COL.dim, 9, 'right');
-    label(ctx, 'PISTON', cx - barW / 2 - 8, pistonT + pistonH / 2, COL.dim, 9, 'right');
-    label(ctx, 'ROD', cx - barW / 2 - 8, pistonB + rodLen * 0.6, COL.dim, 9, 'right');
-  }
-  label(ctx, 'ANVIL', box.x + box.w * 0.05, anvilY + H * 0.035, COL.dim, 9);
-
-  return geo;
 }
 
 /* Simplified hydraulic symbols. Each shows its actual state: a check ball on or
@@ -1338,6 +1592,22 @@ function drawValveSym(ctx, kind, x, y, s, open, col) {
       ctx.arc(cx + off, y, s * 0.34, 0, Math.PI * 2);
       if (open) ctx.stroke(); else ctx.fill();
     }
+  } else if (kind === 'check') {
+    // single check valve: ball lifts off its seat only one way
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.6, y + s * 0.5);
+    ctx.lineTo(x + s * 0.6, y + s * 0.5);
+    ctx.stroke();
+    const off = open ? -s * 0.5 : 0;
+    ctx.beginPath();
+    ctx.arc(x, y + off, s * 0.4, 0, Math.PI * 2);
+    if (open) ctx.stroke(); else ctx.fill();
+    ctx.beginPath();                             // flow direction, into the cylinder
+    ctx.moveTo(x, y - s * 1.15);
+    ctx.lineTo(x - s * 0.3, y - s * 0.75);
+    ctx.moveTo(x, y - s * 1.15);
+    ctx.lineTo(x + s * 0.3, y - s * 0.75);
+    ctx.stroke();
   } else if (kind === 'needle') {
     ctx.beginPath();                           // bore
     ctx.moveTo(x - s * 0.9, y + s * 0.75);
@@ -1568,6 +1838,25 @@ function drawLanding(w, h) {
     ctx.restore();
   }
 
+  /* --- general arrangement callouts, down the left --- */
+  if (w >= 700) {
+    const gl = X(-mw / 2) - 14;
+    const ga = [
+      { tx: X(0), ty: liftY, y: liftY, txt: 'LIFT POINT' },
+      { tx: X(-2.4), ty: mT + 4, y: mT + 4, txt: 'PROTECTION FRAME' },
+      { tx: mL + mW * 0.20, ty: mT + mH * 0.62, y: mT + mH * 0.62, txt: 'PROCESS EQUIPMENT' },
+      { tx: X(-3.6), ty: Y(zb + mmT * 0.5), y: Y(zb + mmT * 0.5), txt: 'MUDMAT' },
+      { tx: X(legX[0]), ty: Y(zb - (LEG_EXT - S.x) * 0.45),
+        y: Y(zb - (LEG_EXT - S.x) * 0.45), txt: 'DAMPER LEG — 4 OFF' }
+    ];
+    let gp = -1e9;
+    for (const c of ga) {
+      c.y = Math.max(c.y, gp + 15);
+      gp = c.y;
+      leader(ctx, c.tx, c.ty, gl, c.y, c.txt, COL.dim, true, 9);
+    }
+  }
+
   // stroke annotation
   if (S.contact) {
     const ax = X(4.9);
@@ -1580,15 +1869,33 @@ function drawLanding(w, h) {
     label(ctx, (S.x * 1000).toFixed(0) + ' mm', ax + 9, Y(LEG_EXT - S.x / 2), COL.sonar, 10);
   }
 
-  /* --- cutaway inset: needs room, so it is dropped on narrow canvases --- */
-  if (w < 620) return;
-  const iw = Math.min(300, w * 0.31), ih = (h - seaY) * 0.86;
-  const ix = w - iw - 12, iy = seaY + (h - seaY) * 0.07;
-  ctx.fillStyle = 'rgba(6,28,38,0.90)';
+  /* --- detail panel: needs room, so it is dropped on narrow canvases ----- */
+  if (w < 700) return;
+  const iw = Math.min(360, w * 0.35), ih = (h - seaY) * 0.94;
+  const ix = w - iw - 10, iy = seaY + (h - seaY) * 0.03;
+
+  // detail marker on the leg it refers to, tied back by a leader
+  const dcx = X(legX[1]), dcy = Y(LEG_EXT - S.x + 0.30), dr = Math.max(16, 0.55 * sc);
+  ctx.strokeStyle = COL.sonar; ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.arc(dcx, dcy, dr, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(dcx + dr * 0.7, dcy - dr * 0.7); ctx.lineTo(ix, iy + ih * 0.30);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  label(ctx, 'A', dcx + dr + 4, dcy - dr - 2, COL.sonar, 11);
+
+  ctx.fillStyle = 'rgba(6,28,38,0.94)';
   ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
   rr(ctx, ix, iy, iw, ih, 3); ctx.fill(); ctx.stroke();
-  label(ctx, 'LEG DETAIL — NOT TO SCALE', ix + 10, iy + 13, COL.dim, 9);
-  drawCutaway(ctx, { x: ix, y: iy + 18, w: iw, h: ih - 24 }, true);
+  label(ctx, 'A  ONE LEG — SECTION AND CIRCUIT', ix + 10, iy + 13, COL.sonar, 9);
+  label(ctx, 'not to scale', ix + iw - 10, iy + 13, COL.dim, 9, 'right');
+  ctx.strokeStyle = COL.line;
+  ctx.beginPath();
+  ctx.moveTo(ix + iw * 0.52, iy + 22); ctx.lineTo(ix + iw * 0.52, iy + ih - 8);
+  ctx.stroke();
+  drawCylinderSection(ctx, { x: ix + 2, y: iy + 22, w: iw * 0.50, h: ih - 30 }, { full: false });
+  drawCircuit(ctx, { x: ix + iw * 0.53, y: iy + 26, w: iw * 0.46, h: ih - 38 }, false);
 }
 
 /* ----------------------------------------------------------- bench scene */
@@ -1597,16 +1904,46 @@ function drawBench(w, h) {
   const ctx = sctx;
   drawWater(ctx, 0, 0, w, h, '#0a2c3c');
 
-  const box = { x: w * 0.05, y: h * 0.19, w: w * 0.90, h: h * 0.74 };
+  const tightScene = w < 700;
   const frac = Math.min(1, S.x / STROKE);
 
-  const geo = drawCutaway(ctx, box, true);
+  // Left: the leg in section. Right: the circuit it is plumbed into.
+  const secW = tightScene ? w * 0.90 : w * 0.52;
+  const box = { x: w * 0.03, y: h * 0.16, w: secW, h: h * 0.78 };
+  const geo = drawCylinderSection(ctx, box, { full: !tightScene });
   const px = geo.cx;
 
-  const tightScene = w < 620;
+  if (!tightScene) {
+    const cbx = w * 0.60, cbw = w * 0.38;
+    ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cbx - w * 0.02, h * 0.08); ctx.lineTo(cbx - w * 0.02, h * 0.95);
+    ctx.stroke();
+    label(ctx, 'HYDRAULIC CIRCUIT', cbx, h * 0.075, COL.dim, 9.5);
+
+    // The line runs from the cap port up and over into the top of the circuit,
+    // so the reader can follow the water from the cylinder into the valves.
+    const cBox = { x: cbx, y: h * 0.13, w: cbw, h: h * 0.80 };
+    const trunkX = cBox.x + cBox.w * 0.42;
+    const trunkY = cBox.y + cBox.h * 0.06;
+    const stubX = geo.portX + Math.min(46, w * 0.035);
+    ctx.strokeStyle = S.lock ? COL.line : COL.lineHi;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(geo.portX, geo.portY);
+    ctx.lineTo(stubX, geo.portY);
+    ctx.lineTo(stubX, trunkY);
+    ctx.lineTo(trunkX, trunkY);
+    ctx.stroke();
+    label(ctx, 'LINE ' + lineLen().toFixed(1) + ' m  ·  ' +
+               (S.q / A_LINE).toFixed(2) + ' m/s',
+          (stubX + trunkX) / 2, trunkY - 11,
+          Math.abs(S.q / A_LINE) > 0.1 ? COL.ice : COL.dim, 9, 'center');
+    drawCircuit(ctx, cBox, true);
+  }
 
   // guide rails
-  const railW = Math.min(Math.max(geo.barW * 3.4, box.w * 0.20), box.w * 0.40);
+  const railW = Math.min(Math.max(geo.barW * 3.4, box.w * 0.20), box.w * 0.42);
   ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
   ctx.setLineDash([4, 6]);
   ctx.beginPath();
@@ -1616,8 +1953,8 @@ function drawBench(w, h) {
   ctx.setLineDash([]);
 
   // drop mass, bolted to the barrel and moving with it
-  const massW = railW * 0.94, massH = h * 0.105;
-  const mx = px - massW / 2, my = geo.barTop - massH;
+  const massW = railW * 0.94, massH = h * 0.095;
+  const mx = px - massW / 2, my = geo.flangeTop - massH;
   ctx.fillStyle = 'rgba(242,165,22,0.12)';
   ctx.fillRect(mx, my, massW, massH);
   ctx.strokeStyle = COL.safety; ctx.lineWidth = 2.2;
@@ -1654,45 +1991,24 @@ function drawBench(w, h) {
   if (arrested && !tightScene) {
     const V = Math.max(V_DEAD, V_CAP0 - A_P * S.x);
     const dV = Math.max(0, S.p) * V / effectiveBeta(S.p + P_AMB);
-    const lx = box.x + box.w * 0.62, ly = box.y + box.h * 0.045;
-    label(ctx, S.lock ? 'FLOW ARRESTED — BOTH WAYS' : 'METERING PATH ARRESTED',
-          lx, ly, COL.alarm, 11);
+    const ly = h * 0.955;
     label(ctx, 'water squeezed by ' + (100 * dV / V).toFixed(3) + ' % of its volume',
-          lx, ly + 15, COL.mist, 10);
+          w - 14, ly, COL.mist, 9.5, 'right');
+    label(ctx, S.lock ? 'FLOW ARRESTED — BOTH WAYS' : 'METERING PATH ARRESTED',
+          w - 14 - 250, ly, COL.alarm, 10.5, 'right');
   }
 
-  /* ---- stroke gauges and energy budget: the readout rail carries the same
-         numbers, so they are dropped when the canvas has no room ---------- */
+  /* ---- travel magnifier: sub-millimetre motion needs help to be visible -- */
   if (tightScene) return;
-
-  const gx = box.x + box.w * 0.055, gy = box.y + box.h * 0.16, gh = box.h * 0.44;
-  const bars = [
-    { x: gx,      cap: 'TRUE',  f: frac },
-    { x: gx + 26, cap: 'x100', f: Math.min(1, frac * 100) }
-  ];
-  label(ctx, 'STROKE', gx - 4, gy - 22, COL.dim, 9);
-  for (const b of bars) {
-    ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
-    ctx.strokeRect(b.x - 4.5, gy + 0.5, 9, gh);
-    ctx.fillStyle = b.cap === 'TRUE' ? COL.sonar : 'rgba(53,214,189,0.45)';
-    ctx.fillRect(b.x - 3, gy + 1, 6, Math.max(1, gh * b.f));
-    label(ctx, b.cap, b.x, gy - 8, COL.dim, 8.5, 'center');
-  }
-  label(ctx, (S.x * 1000).toFixed(2) + ' mm', gx - 4, gy + gh + 14, COL.sonar, 10.5);
-  label(ctx, 'of 600 mm available', gx - 4, gy + gh + 27, COL.dim, 9);
-  label(ctx, 'peak ' + (S.peakX * 1000).toFixed(2) + ' mm', gx - 4, gy + gh + 40, COL.mist, 9);
-
-  /* ---- energy split: dissipated as heat vs handed back to the load ------- */
-  const ex = gx - 4, ey = box.y + box.h * 0.80, ew = box.w * 0.24, eh = 9;
-  const tot = Math.max(1, S.eIn);
-  const dFrac = Math.min(1, S.eDiss / tot);
-  label(ctx, 'ENERGY BUDGET', ex, ey - 14, COL.dim, 9);
-  ctx.fillStyle = COL.line; ctx.fillRect(ex, ey, ew, eh);
-  ctx.fillStyle = COL.sonar; ctx.fillRect(ex, ey, ew * dFrac, eh);
-  ctx.fillStyle = COL.safety; ctx.fillRect(ex + ew * dFrac, ey, ew * (1 - dFrac), eh);
-  label(ctx, 'DISSIPATED ' + (S.eDiss / 1e3).toFixed(1) + ' kJ', ex, ey + eh + 12, COL.sonar, 9);
-  label(ctx, 'RETURNED ' + (Math.max(0, S.eIn - S.eDiss) / 1e3).toFixed(1) + ' kJ',
-        ex, ey + eh + 24, COL.safety, 9);
+  const gx = box.x + box.w * 0.035, gy = box.y + box.h * 0.20, gh = box.h * 0.40;
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.strokeRect(gx - 4.5, gy + 0.5, 9, gh);
+  ctx.fillStyle = 'rgba(53,214,189,0.55)';
+  ctx.fillRect(gx - 3, gy + 1, 6, Math.max(1, gh * Math.min(1, frac * 100)));
+  label(ctx, 'TRAVEL', gx, gy - 20, COL.dim, 8.5, 'center');
+  label(ctx, 'x100', gx, gy - 9, COL.sonar, 8.5, 'center');
+  label(ctx, (S.x * 1000).toFixed(2), gx, gy + gh + 13, COL.sonar, 10, 'center');
+  label(ctx, 'mm', gx, gy + gh + 24, COL.dim, 8.5, 'center');
 }
 
 /* ---------------------------------------------------------- trace charts */

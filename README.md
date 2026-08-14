@@ -7,6 +7,12 @@ behave as the near-incompressible solid it actually is.
 
 Open `index.html` in any browser. No build step, no dependencies, no network access.
 
+Both modes draw the leg as a proper sectional elevation — hatched cut metal, end caps, rod
+gland, piston and rod seals, cap port and sea vent, dimension lines and leader callouts — next
+to the hydraulic circuit drawn topologically, so you can follow the water from the cap port
+through the port block, out through whichever of the parallel paths is passing, and into the
+sea. On the landing view the same pair appears as **Detail A**, keyed to the leg it belongs to.
+
 ```
 git clone <this repo> && open index.html
 ```
