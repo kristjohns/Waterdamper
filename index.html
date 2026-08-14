@@ -1,0 +1,1769 @@
+<title>Soft-Landing Cylinder</title>
+<style>
+  :root {
+    /* Abyssal ROV-console palette. Single committed visual world: you are
+       looking through a subsea viewport, so the page does not invert. */
+    --abyss:   #04141c;
+    --deep:    #061c26;
+    --panel:   #082430;
+    --panel-2: #0a2c3a;
+    --line:    #14404f;
+    --line-hi: #1f5a6d;
+    --chalk:   #e4eff2;
+    --mist:    #90adb7;
+    --dim:     #5d7d89;
+    --safety:  #f2a516;
+    --safety-d:#a86f08;
+    --sonar:   #35d6bd;
+    --ice:     #6fb6dd;
+    --alarm:   #ff6046;
+
+    --mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+            "DejaVu Sans Mono", "Liberation Mono", monospace;
+    --serif: "Iowan Old Style", "Hoefler Text", "Bitstream Charter", Palatino,
+             "Palatino Linotype", "Book Antiqua", Georgia, "Liberation Serif", serif;
+
+    --gap: 22px;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--abyss);
+    color: var(--chalk);
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1360px;
+    margin: 0 auto;
+    padding: 34px 26px 90px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+  }
+
+  /* ---------------------------------------------------------- masthead */
+
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 20px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--safety);
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(26px, 4.4vw, 42px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede {
+    margin: 12px 0 0;
+    max-width: 56ch;
+    color: var(--mist);
+    font-size: 16.5px;
+  }
+
+  .modes {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--line-hi);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .mode {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-right: 1px solid var(--line);
+    color: var(--mist);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 11px 18px;
+    cursor: pointer;
+    transition: background 140ms, color 140ms;
+  }
+  .mode:last-child { border-right: 0; }
+  .mode:hover { background: var(--panel-2); color: var(--chalk); }
+  .mode.is-on { background: var(--safety); color: #17140a; font-weight: 600; }
+  .mode:focus-visible { outline: 2px solid var(--sonar); outline-offset: -2px; }
+
+  /* ------------------------------------------------------------- stage */
+
+  .rig {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: var(--gap);
+    align-items: start;
+  }
+
+  .stage {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--deep);
+    overflow: hidden;
+    min-height: 380px;
+  }
+
+  #scene { display: block; width: 100%; height: 540px; }
+
+  .stage-tag {
+    position: absolute;
+    left: 14px;
+    bottom: 12px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: calc(100% - 28px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .banner {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 7px 16px;
+    border: 1px solid var(--alarm);
+    color: var(--alarm);
+    background: rgba(255, 96, 70, 0.10);
+    border-radius: var(--radius);
+    opacity: 0;
+    transition: opacity 180ms;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .banner.on { opacity: 1; }
+
+  /* -------------------------------------------------------------- rail */
+
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 14px 15px 16px;
+  }
+
+  .card > h3 {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin: 0 0 12px;
+    font-weight: 500;
+  }
+
+  .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+  .ro { background: var(--panel); padding: 9px 10px 10px; }
+  .ro.wide { grid-column: 1 / -1; }
+  .ro-k {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--dim);
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ro-v {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 19px;
+    line-height: 1.25;
+    color: var(--chalk);
+    margin-top: 3px;
+  }
+  .ro-v small { font-size: 11px; color: var(--dim); margin-left: 3px; }
+  .ro-v.acc { color: var(--safety); }
+  .ro-v.son { color: var(--sonar); }
+  .ro-v.alm { color: var(--alarm); }
+  .ro-note {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--mist);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .ctl { display: flex; flex-direction: column; gap: 13px; }
+  .ctl-row label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mist);
+    margin-bottom: 5px;
+    gap: 8px;
+  }
+  .ctl-row label b {
+    color: var(--chalk);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  input[type=range] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    height: 18px;
+    background: transparent;
+    cursor: pointer;
+    margin: 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 2px; background: var(--line-hi); border-radius: 2px;
+  }
+  input[type=range]::-moz-range-track {
+    height: 2px; background: var(--line-hi); border-radius: 2px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px; height: 13px; margin-top: -5.5px;
+    background: var(--safety); border-radius: 50%; border: 0;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 13px; height: 13px;
+    background: var(--safety); border-radius: 50%; border: 0;
+  }
+  input[type=range]:focus-visible { outline: 2px solid var(--sonar); outline-offset: 3px; }
+
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  button.act {
+    appearance: none;
+    background: var(--panel-2);
+    border: 1px solid var(--line-hi);
+    color: var(--chalk);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 9px 13px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 140ms, border-color 140ms, color 140ms;
+    flex: 1 1 auto;
+  }
+  button.act:hover { background: var(--line); border-color: var(--sonar); }
+  button.act:focus-visible { outline: 2px solid var(--sonar); outline-offset: 2px; }
+  button.act.primary { background: var(--safety); color: #17140a; border-color: var(--safety); font-weight: 600; }
+  button.act.primary:hover { background: #ffb827; border-color: #ffb827; }
+  button.act.danger.on { background: var(--alarm); border-color: var(--alarm); color: #1b0703; font-weight: 600; }
+  button.act.toggled { background: var(--line); border-color: var(--sonar); color: var(--sonar); }
+
+  .seg { display: flex; border: 1px solid var(--line-hi); border-radius: var(--radius); overflow: hidden; }
+  .seg button {
+    flex: 1;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-right: 1px solid var(--line);
+    color: var(--mist);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 4px;
+    cursor: pointer;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { background: var(--panel-2); color: var(--chalk); }
+  .seg button.on { background: var(--sonar); color: #04201b; font-weight: 600; }
+  .seg button:focus-visible { outline: 2px solid var(--sonar); outline-offset: -2px; }
+
+  /* ------------------------------------------------------------ traces */
+
+  .chartband {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 12px 14px 6px;
+  }
+  .chartband header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .chartband h3 {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin: 0;
+    font-weight: 500;
+  }
+  .legend { display: flex; gap: 16px; font-family: var(--mono); font-size: 10px;
+            letter-spacing: 0.08em; text-transform: uppercase; color: var(--mist); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 2px; display: inline-block; }
+  #traces { display: block; width: 100%; height: 210px; }
+
+  /* ------------------------------------------------------------- notes */
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 34px 44px;
+    border-top: 1px solid var(--line);
+    padding-top: 30px;
+  }
+  .notes h2 {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--safety);
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+  .notes p { margin: 0 0 13px; color: #cfe0e5; }
+  .notes p:last-child { margin-bottom: 0; }
+  .notes strong { color: var(--chalk); font-weight: 600; }
+
+  .eq {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--sonar);
+    background: var(--panel);
+    border-left: 2px solid var(--sonar);
+    padding: 11px 14px;
+    margin: 0 0 13px;
+    overflow-x: auto;
+    white-space: nowrap;
+    line-height: 1.7;
+  }
+  .eq i { color: var(--dim); font-style: normal; }
+
+  dl.spec { margin: 0; font-family: var(--mono); font-size: 12.5px; }
+  dl.spec div {
+    display: flex; justify-content: space-between; gap: 14px;
+    padding: 7px 0; border-bottom: 1px dotted var(--line);
+  }
+  dl.spec dt { color: var(--mist); }
+  dl.spec dd { margin: 0; color: var(--chalk); font-variant-numeric: tabular-nums; text-align: right; }
+
+  ol.refs { margin: 0; padding: 0; list-style: none; counter-reset: r; }
+  ol.refs li {
+    counter-increment: r;
+    position: relative;
+    padding: 0 0 12px 30px;
+    font-size: 14.5px;
+    color: var(--mist);
+    line-height: 1.5;
+  }
+  ol.refs li::before {
+    content: counter(r, decimal-leading-zero);
+    position: absolute; left: 0; top: 2px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--safety-d);
+  }
+  a { color: var(--ice); text-decoration-color: var(--line-hi); text-underline-offset: 2px; }
+  a:hover { color: var(--sonar); }
+  a:focus-visible { outline: 2px solid var(--sonar); outline-offset: 2px; }
+
+  .colophon {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+    line-height: 1.7;
+  }
+
+  @media (max-width: 900px) {
+    .rig { grid-template-columns: minmax(0, 1fr); }
+    #scene { height: 420px; }
+    .readouts { grid-template-columns: 1fr 1fr 1fr; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 24px 16px 60px; }
+    .readouts { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 1ms !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <span class="eyebrow">Subsea installation &middot; seawater metering damper</span>
+      <h1>Soft-Landing Cylinder</h1>
+      <p class="lede">A 60-tonne module comes down on the wire at half a metre a second.
+        Four seawater cylinders have to absorb it. Watch the water do the work &mdash;
+        then shut the valve and watch it refuse to.</p>
+    </div>
+    <nav class="modes" role="tablist" aria-label="Simulation mode">
+      <button class="mode is-on" data-mode="landing" role="tab" aria-selected="true">Landing</button>
+      <button class="mode" data-mode="bench" role="tab" aria-selected="false">Hydraulic lock</button>
+    </nav>
+  </header>
+
+  <section class="rig">
+    <div class="stage">
+      <canvas id="scene"></canvas>
+      <div class="banner" id="banner"></div>
+      <div class="stage-tag" id="stageTag"></div>
+    </div>
+
+    <aside class="rail">
+      <div class="card" style="padding:0;border:0;">
+        <div class="readouts" id="readouts"></div>
+      </div>
+      <div class="card">
+        <h3>Controls</h3>
+        <div class="ctl" id="controls"></div>
+      </div>
+      <div class="card">
+        <h3>Transport</h3>
+        <div class="btns" id="transport" style="margin-bottom:10px;"></div>
+        <div class="seg" id="speed" role="group" aria-label="Playback speed"></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="chartband">
+    <header>
+      <h3>Chart recorder</h3>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--safety)"></i>Leg load</span>
+        <span><i class="swatch" style="background:var(--ice)"></i>Chamber pressure</span>
+        <span><i class="swatch" style="background:var(--sonar)"></i>Descent rate</span>
+      </div>
+    </header>
+    <canvas id="traces"></canvas>
+  </section>
+
+  <section class="notes">
+
+    <div>
+      <h2>What this is</h2>
+      <p>When a subsea module is lowered onto a template or mudmat, vessel heave means it
+        arrives with real velocity &mdash; typically <strong>0.3 to 0.5 m/s</strong>, sometimes
+        more. Hitting a steel foundation at that speed generates a load spike several times
+        the module's submerged weight and can damage connectors, guideposts and soft soil.</p>
+      <p>The fix is a passive damper filled with the one fluid available in unlimited quantity
+        at 300 m depth: <strong>seawater</strong>. The cylinder fills through a check valve as it
+        extends on the way down. On contact, that check valve slams shut and the trapped water
+        can only leave through a metered path &mdash; a small fixed orifice, backed by a relief
+        valve that opens for the initial spike. Commercial units are marketed as
+        <em>soft-landing cylinders</em>, and the patent literature describes exactly this
+        arrangement.</p>
+      <p>The published behaviour is a two-phase stop: a short, hard <strong>shock-absorption
+        phase</strong> where the relief valve caps the pressure, then a long, quiet
+        <strong>soft-landing phase</strong> where the fixed orifice bleeds the remaining stroke
+        at nearly constant force, taking the module from 0.5 m/s down to roughly 0.04 m/s over
+        two or three seconds. Peak landing load drops by around 90&nbsp;percent.</p>
+    </div>
+
+    <div>
+      <h2>The model</h2>
+      <p>Both modes run the same lumped-parameter chamber. Compression drives flow out of the
+        cap volume; the orifice and relief valve set how easily it leaves; whatever cannot leave
+        compresses the water itself.</p>
+      <div class="eq">dp/dt = (&beta;<i>eff</i> / V) &middot; ( A<i>p</i>&middot;u &minus; Q<i>out</i>(p) )</div>
+      <div class="eq">Q<i>out</i> = C<i>d</i>&middot;A<i>o</i>&middot;&radic;(2p/&rho;) &nbsp;+&nbsp; C<i>d</i>&middot;A<i>r</i>&middot;&radic;(2(p&minus;p<i>set</i>)/&rho;)</div>
+      <p>That single equation covers the whole story. With the orifice open, the pressure term
+        equilibrates almost instantly and you recover the classic square-law damper,
+        <span style="font-family:var(--mono);font-size:13px;color:var(--sonar)">F &prop; u&sup2;</span>.
+        With the orifice shut, Q<i>out</i> = 0 and the same equation becomes a very stiff spring
+        of rate <span style="font-family:var(--mono);font-size:13px;color:var(--sonar)">k = &beta;A&sup2;/V</span>.
+        Nothing is switched; the physics changes character on its own.</p>
+      <p>Effective bulk modulus follows seawater at <strong>2.34 GPa</strong>, corrected for
+        entrained gas by <span style="font-family:var(--mono);font-size:12.5px">1/&beta; =
+        (1&minus;x)/&beta;<i>w</i> + x/p<i>abs</i></span> with the gas fraction shrinking
+        isothermally as pressure rises. Integration is semi-implicit in pressure, which is what
+        keeps the near-closed valve stable at a 50 &micro;s step.</p>
+    </div>
+
+    <div>
+      <h2>Stopping the flow</h2>
+      <p>Switch to <strong>Hydraulic lock</strong> and close the metering valve, or hit
+        <em>Block ports</em> to shut the pilot-operated check valve as well. The water now has
+        nowhere to go, and the damper stops being a damper.</p>
+      <p>What you get instead is a spring made of water. At the default bench setting the piston
+        moves a few millimetres rather than the full 600 mm stroke, chamber pressure jumps to
+        several hundred bar, and the load <strong>bounces</strong> &mdash; because a locked
+        chamber stores energy elastically and gives it straight back, where an orifice turns it
+        into heat. The <em>dissipated</em> and <em>returned</em> readouts split that budget for
+        you.</p>
+      <p>The lock is also a good way to see what "incompressible" really costs. At 300 bar the
+        trapped water has given up about <strong>1.3&nbsp;percent</strong> of its volume &mdash;
+        small, but not zero, and on a 17-litre chamber that is the whole of the piston travel
+        you can see. Dial in even <strong>half a percent of entrained air</strong> and the
+        assumption falls apart entirely: the strut goes soft at low pressure and only stiffens up
+        once the bubbles have been squeezed out of existence. That soft-then-hard curve is a real
+        commissioning problem, and it is why these cylinders are bled carefully.</p>
+    </div>
+
+    <div>
+      <h2>Reference configuration</h2>
+      <dl class="spec">
+        <div><dt>Legs</dt><dd>4</dd></div>
+        <div><dt>Bore / rod</dt><dd>180 / 90 mm</dd></div>
+        <div><dt>Piston area</dt><dd>0.0254 m&sup2;</dd></div>
+        <div><dt>Stroke</dt><dd>600 mm</dd></div>
+        <div><dt>Cap volume, extended</dt><dd>17.0 L</dd></div>
+        <div><dt>Working fluid</dt><dd>Seawater, 1025 kg/m&sup3;</dd></div>
+        <div><dt>Bulk modulus</dt><dd>2.34 GPa</dd></div>
+        <div><dt>Discharge coefficient</dt><dd>0.61</dd></div>
+        <div><dt>Water depth</dt><dd>300 m (31.2 bar ambient)</dd></div>
+        <div><dt>Wire stiffness</dt><dd>1.3 MN/m</dd></div>
+        <div><dt>Added mass</dt><dd>1.0 &times; dry mass</dd></div>
+        <div><dt>Integration step</dt><dd>50 &micro;s</dd></div>
+      </dl>
+      <p style="margin-top:14px;font-size:14px;color:var(--mist)">Sizing is deliberately close to
+        the published devices: the 5.5 mm default orifice is what falls out of asking for a
+        0.05 m/s terminal creep under the module's submerged weight, and it lands squarely in the
+        3&ndash;10 mm range quoted in the patent.</p>
+    </div>
+
+    <div>
+      <h2>What is simplified</h2>
+      <p>One vertical degree of freedom &mdash; no pitch, roll, pendulum swing or off-centre
+        landing, all of which matter in a real analysis. Added mass is a constant multiple rather
+        than the depth- and proximity-dependent coefficient DNV-RP-N103 would have you use, and
+        the sharp rise in added mass as a mudmat approaches the seabed is not modelled. Soil is a
+        rigid foundation, so there is no bearing failure, no suction on retrieval and no water
+        entrapment under the mudmat. Valve dynamics are quasi-steady, so relief-valve chatter and
+        genuine distributed water hammer do not appear; the Joukowsky figure shown on the lock
+        readout is an indicator, not a solved transient. Seal friction is a single Coulomb term.</p>
+      <p>It is a teaching model with defensible numbers, not an installation analysis.</p>
+    </div>
+
+    <div>
+      <h2>Sources</h2>
+      <ol class="refs">
+        <li><a href="https://patents.google.com/patent/US4399764A/en">US 4,399,764 &mdash; Passive shock mitigation system with sea water metering shock absorber</a>. Tapered metering slots that progressively close, giving resistance that goes "from soft to hard", ending in a hydraulic lock at full compression.</li>
+        <li><a href="https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10995465">US 10,995,465 &mdash; Damper for absorbing shock generated upon docking a moving structure with a stationary structure or foundation</a>. Source of the check-valve fill, 80&ndash;175 bar relief setting, 3&ndash;10 mm static orifice, and the worked 32.5 t example that goes 0.5 m/s to 0.04 m/s at 426 kN.</li>
+        <li><a href="https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10295007">US 10,295,007 &mdash; Subsea dynamic load absorber</a>.</li>
+        <li><a href="https://www.depro.no/products/mechanical-energy-power-systems/soft-landing-cylinder/">Depro &mdash; Soft landing cylinders</a>, a commercial unit for reducing impact when modules are installed subsea, quoted as taking 0.5 m/s to zero over two to three seconds of cylinder length.</li>
+        <li><a href="https://rules.dnv.com/docs/pdf/dnvpm/codes/docs/2010-04/RP-H103.pdf">DNV-RP-H103 / N103, Modelling and analysis of marine operations</a>. Section 6 covers landing on the seabed; the drag and added-mass framework used here is its simplified cousin.</li>
+        <li><a href="https://nodynamics.com/knowledge-hub/subsea-lifts/">Norwegian Dynamics &mdash; Subsea lifting: drag, added mass and dynamic loads</a>, and their companion note on <a href="https://nodynamics.com/knowledge-hub/passive-heave-compensation/">passive heave compensation</a>.</li>
+        <li><a href="https://www.powermotiontech.com/hydraulics/hydraulic-fluids/article/21885008/bulk-modulus-what-is-it-when-is-it-important">Power &amp; Motion Tech &mdash; Bulk modulus: what is it, when is it important</a>. On why stiffer fluid absorbs less energy and overshoots less, and why entrained air ruins the assumption.</li>
+      </ol>
+    </div>
+
+  </section>
+
+  <div class="colophon">
+    Interactive model &middot; seawater-metered damper, single vertical degree of freedom &middot;
+    semi-implicit chamber pressure at 50 &micro;s
+  </div>
+
+</div>
+
+<script>
+"use strict";
+(function () {
+
+/* =====================================================================
+   Constants
+   ===================================================================== */
+
+const G       = 9.81;
+const RHO     = 1025;        // seawater density, kg/m3
+const BETA_W  = 2.34e9;      // bulk modulus of seawater, Pa
+const CD      = 0.61;        // orifice discharge coefficient
+const RHO_ST  = 7850;        // steel, for buoyancy of the module
+
+const DEPTH   = 300;                                  // m
+const P_AMB   = 1.013e5 + RHO * G * DEPTH;            // absolute ambient, Pa
+
+const BORE    = 0.180;
+const A_P     = Math.PI * BORE * BORE / 4;            // 0.02545 m2
+const STROKE  = 0.600;
+const V_DEAD  = 0.0015;                               // m3
+const V_CAP0  = A_P * STROKE + V_DEAD;                // ~17 L
+
+const A_CHECK = 4.0e-3;      // check valve, effectively unrestricted refill
+const A_RELIEF= 3.3e-4;      // relief poppet flow area, m2
+const LEG_EXT = 1.20;        // leg protrusion below mudmat when extended, m
+
+const K_WIRE  = 1.30e6;      // N/m
+const Z_WIRE  = 1.9e4;       // wire damping, N.s/m
+const K_STEEL = 6.0e8;       // rigid steel-on-steel contact, N/m
+const K_END   = 8.0e8;       // mechanical end stop
+const F_SEAL  = 2.2e3;       // Coulomb seal friction per leg, N
+
+const CD_MOD  = 1.5;         // module drag coefficient
+const A_MOD   = 64;          // projected plan area, m2
+const ADDED_M = 1.0;         // added mass ratio
+
+const DT      = 5e-5;
+const MAX_SUB = 1400;
+
+/* =====================================================================
+   Parameters and state
+   ===================================================================== */
+
+const CONTROLS = {
+  landing: [
+    { id: 'heave',   label: 'Vessel heave amplitude', unit: 'm',   min: 0,   max: 2,   step: 0.05, val: 0.70 },
+    { id: 'period',  label: 'Wave period',            unit: 's',   min: 6,   max: 16,  step: 0.5,  val: 10 },
+    { id: 'lower',   label: 'Lowering speed',         unit: 'm/s', min: 0,   max: 0.4, step: 0.01, val: 0.12 },
+    { id: 'mass',    label: 'Module dry mass',        unit: 't',   min: 20,  max: 150, step: 5,    val: 60 },
+    { id: 'orifice', label: 'Metering orifice',       unit: 'mm',  min: 2,   max: 14,  step: 0.5,  val: 5.5 },
+    { id: 'relief',  label: 'Relief setting',         unit: 'bar', min: 40,  max: 220, step: 5,    val: 110 }
+  ],
+  bench: [
+    { id: 'vimp',    label: 'Impact velocity',        unit: 'm/s', min: 0.1, max: 1.5, step: 0.05, val: 0.50 },
+    { id: 'dmass',   label: 'Drop mass',              unit: 't',   min: 1,   max: 30,  step: 0.5,  val: 8 },
+    { id: 'valve',   label: 'Metering valve opening', unit: '%',   min: 0,   max: 100, step: 1,    val: 100 },
+    { id: 'air',     label: 'Entrained air',          unit: '%',   min: 0,   max: 3,   step: 0.05, val: 0 },
+    { id: 'relief2', label: 'Relief setting',         unit: 'bar', min: 40,  max: 400, step: 5,    val: 150 }
+  ]
+};
+
+const VALVE_FULL = 1.5e-4;   // m2 at 100 % opening in bench mode
+
+const P = {};                // live parameter values, keyed by control id
+for (const m in CONTROLS) for (const c of CONTROLS[m]) P[c.id] = c.val;
+
+const S = {
+  mode: 'landing',
+  running: true,
+  speed: 1,
+  t: 0,
+  z: 0, v: 0,          // body position (m, above foundation) and velocity (+up)
+  x: 0,                // damper compression, m
+  p: 0,                // chamber gauge pressure, Pa
+  contact: false,
+  vImpact: 0,
+  peakF: 0, peakP: 0, peakX: 0,
+  eIn: 0, eDiss: 0,    // J, per whole damper set
+  vOut: 0,             // cumulative fluid expelled, m3
+  rigid: false,
+  blocked: false,
+  bounces: 0,
+  wasContact: false,
+  jet: 0,              // 0..1, drives the jet particles
+  flash: 0,
+  trace: [],
+  bubbles: [],
+  jets: []
+};
+
+/* =====================================================================
+   Physics
+   ===================================================================== */
+
+/* Four legs carry the module; the bench rig is a single cylinder. */
+function nLegs() { return S.mode === 'landing' ? 4 : 1; }
+
+function effectiveBeta(pAbs) {
+  const x0 = (S.mode === 'bench' ? P.air : 0) / 100;
+  if (x0 <= 0) return BETA_W;
+  const pa = Math.max(pAbs, 1e4);
+  const r  = x0 * P_AMB / pa;                 // gas volume, relative to total at ambient
+  const xg = r / (1 - x0 + r);                // current gas volume fraction
+  return 1 / ((1 - xg) / BETA_W + xg / pa);
+}
+
+function orificeArea() {
+  if (S.blocked) return 0;
+  if (S.mode === 'bench') return VALVE_FULL * (P.valve / 100);
+  const d = P.orifice / 1000;
+  return Math.PI * d * d / 4;
+}
+
+function reliefSet() {
+  return (S.mode === 'bench' ? P.relief2 : P.relief) * 1e5;
+}
+
+/* Signed flow out of the cap chamber, and its derivative w.r.t. pressure.
+   Positive p pushes water out through orifice + relief; negative p draws it
+   back in through the check valve (blocked when both ports are shut). */
+function flowOut(p) {
+  const k = Math.sqrt(2 / RHO);
+  if (p >= 0) {
+    const pe = Math.max(p, 100);
+    const Ao = orificeArea();
+    let q  = CD * Ao * k * Math.sqrt(pe);
+    let dq = CD * Ao * k * 0.5 / Math.sqrt(pe);
+    const ps = reliefSet();
+    if (p > ps && !S.blocked) {
+      const dp = Math.max(p - ps, 100);
+      q  += CD * A_RELIEF * k * Math.sqrt(dp);
+      dq += CD * A_RELIEF * k * 0.5 / Math.sqrt(dp);
+    }
+    return [q, dq];
+  }
+  if (S.blocked) return [0, 0];
+  const pe = Math.max(-p, 100);
+  return [-CD * A_CHECK * k * Math.sqrt(pe), CD * A_CHECK * k * 0.5 / Math.sqrt(pe)];
+}
+
+/* One chamber update. u is the compression rate, m/s (positive = closing). */
+function stepChamber(dt, u) {
+  const V   = Math.max(V_DEAD, V_CAP0 - A_P * S.x);
+  const bet = effectiveBeta(S.p + P_AMB);
+  const c   = bet / V;
+  const [q, dq] = flowOut(S.p);
+  const dp = dt * c * (A_P * u - q) / (1 + dt * c * dq);
+  S.p = Math.min(1.2e9, Math.max(-P_AMB * 0.98, S.p + dp));
+
+  const qNow = flowOut(S.p)[0];
+  if (qNow > 0) {
+    S.vOut  += qNow * dt * nLegs();
+    S.eDiss += S.p * qNow * dt * nLegs();
+  }
+  S.jet = Math.min(1, Math.max(S.jet * 0.94, Math.min(1, qNow / 2.0e-3)));
+}
+
+function legForce(dt, u) {
+  // Returns upward force from the whole leg set, N.
+  if (S.x <= 0) {
+    // Out of contact: let the check valve refill the chamber.
+    S.p *= Math.exp(-dt / 0.02);
+    S.jet *= 0.9;
+    return 0;
+  }
+  if (S.rigid) {
+    const f = K_STEEL * S.x + 2.4e6 * Math.max(u, 0);
+    return Math.max(0, f);
+  }
+  stepChamber(dt, u);
+  const n = nLegs();
+  let f = n * A_P * Math.max(S.p, 0);
+  if (S.x > STROKE) f += K_END * (S.x - STROKE) + 4e6 * Math.max(u, 0);
+  if (Math.abs(u) > 1e-4) f += n * F_SEAL * Math.sign(u);
+  return Math.max(0, f);
+}
+
+function stepLanding(dt) {
+  const m    = P.mass * 1000;
+  const W    = m * G * (1 - RHO / RHO_ST);
+  const meff = m * (1 + ADDED_M);
+
+  const w    = 2 * Math.PI / P.period;
+  const zTop = 40 + P.heave * Math.sin(w * S.t);
+  const vTop = P.heave * w * Math.cos(w * S.t);
+  const len  = S.wireLen0 + P.lower * S.t;
+
+  const e    = (zTop - S.z) - len;
+  let T = 0;
+  if (e > 0) T = Math.max(0, K_WIRE * e + Z_WIRE * (vTop - S.v - P.lower));
+
+  const Fd = -0.5 * RHO * CD_MOD * A_MOD * S.v * Math.abs(S.v);
+
+  S.x = Math.max(0, LEG_EXT - S.z);
+  const u = S.x > 0 ? -S.v : 0;
+  if (S.x > 0 && !S.wasContact) { S.vImpact = -S.v; S.wasContact = true; S.flash = 1; }
+  if (S.x <= 0) S.wasContact = false;
+  S.contact = S.x > 0;
+
+  const Fl = legForce(dt, u);
+  if (S.contact && u > 0) S.eIn += Fl * u * dt;
+
+  const a = (T - W + Fd + Fl) / meff;
+  S.v += a * dt;
+  S.z += S.v * dt;
+
+  S.peakF = Math.max(S.peakF, Fl);
+  S.peakP = Math.max(S.peakP, S.p);
+  S.peakX = Math.max(S.peakX, S.x);
+  S.wireT = T;
+  S.legF  = Fl;
+}
+
+function stepBench(dt) {
+  const m    = P.dmass * 1000;
+  const W    = m * G * (1 - RHO / RHO_ST);
+
+  S.x = Math.max(0, LEG_EXT - S.z);
+  const u = S.x > 0 ? -S.v : 0;
+  if (S.x > 0 && !S.wasContact) { S.vImpact = -S.v; S.wasContact = true; S.flash = 1; }
+  if (S.x <= 0 && S.wasContact) { S.wasContact = false; S.bounces++; }
+  S.contact = S.x > 0;
+
+  const Fd = -0.5 * RHO * 1.0 * 4 * S.v * Math.abs(S.v);
+  const Fl = legForce(dt, u);
+  if (S.contact && u > 0) S.eIn += Fl * u * dt;
+
+  const a = (Fl - W + Fd) / m;
+  S.v += a * dt;
+  S.z += S.v * dt;
+
+  S.peakF = Math.max(S.peakF, Fl);
+  S.peakP = Math.max(S.peakP, S.p);
+  S.peakX = Math.max(S.peakX, S.x);
+  S.legF  = Fl;
+}
+
+function step(dt) {
+  if (S.mode === 'landing') stepLanding(dt); else stepBench(dt);
+  S.t += dt;
+  S.flash = Math.max(0, S.flash - dt * 3);
+
+  const last = S.trace.length ? S.trace[S.trace.length - 1].t : -1;
+  if (S.t - last > 0.004) {
+    S.trace.push({ t: S.t, F: S.legF || 0, p: Math.max(0, S.p), v: Math.max(0, -S.v) });
+    while (S.trace.length && S.t - S.trace[0].t > 8) S.trace.shift();
+  }
+}
+
+/* =====================================================================
+   Reset
+   ===================================================================== */
+
+function reset() {
+  S.t = 0; S.v = 0; S.p = 0; S.x = 0;
+  S.peakF = 0; S.peakP = 0; S.peakX = 0;
+  S.eIn = 0; S.eDiss = 0; S.vOut = 0;
+  S.vImpact = 0; S.contact = false; S.wasContact = false;
+  S.bounces = 0; S.jet = 0; S.flash = 0;
+  S.trace.length = 0;
+  S.legF = 0; S.wireT = 0;
+
+  if (S.mode === 'landing') {
+    S.z = LEG_EXT + 1.15;
+    const m = P.mass * 1000;
+    const W = m * G * (1 - RHO / RHO_ST);
+    S.wireLen0 = (40 - S.z) - W / K_WIRE;   // start hanging in equilibrium
+  } else {
+    S.z = LEG_EXT + 0.001;
+    S.v = -P.vimp;
+  }
+
+  S.bubbles.length = 0;
+  for (let i = 0; i < 34; i++) {
+    S.bubbles.push({ x: Math.random(), y: Math.random(), r: 0.6 + Math.random() * 1.9,
+                     s: 0.10 + Math.random() * 0.30 });
+  }
+  S.jets.length = 0;
+}
+
+/* =====================================================================
+   Canvas plumbing
+   ===================================================================== */
+
+const scene   = document.getElementById('scene');
+const sctx    = scene.getContext('2d');
+const tracesC = document.getElementById('traces');
+const tctx    = tracesC.getContext('2d');
+
+function fitCanvas(cv, ctx) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const r = cv.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if (cv.width !== w * dpr || cv.height !== h * dpr) {
+    cv.width = w * dpr; cv.height = h * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { w: w, h: h };
+}
+
+function rr(ctx, x, y, w, h, r) {
+  r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function label(ctx, txt, x, y, col, size, align) {
+  ctx.font = (size || 10) + 'px ui-monospace, "DejaVu Sans Mono", monospace';
+  ctx.fillStyle = col;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, x, y);
+}
+
+const COL = {
+  abyss: '#04141c', deep: '#061c26', panel: '#082430',
+  line: '#14404f', lineHi: '#1f5a6d', chalk: '#e4eff2',
+  mist: '#90adb7', dim: '#5d7d89', safety: '#f2a516',
+  sonar: '#35d6bd', ice: '#6fb6dd', alarm: '#ff6046',
+  steelD: '#243c47', steel: '#3a5b69', steelL: '#557a8a'
+};
+
+/* ------------------------------------------------------- water backdrop */
+
+function drawWater(ctx, x, y, w, h, topShade) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, topShade || '#0b3245');
+  g.addColorStop(1, '#03101a');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.globalAlpha = 0.5;
+  for (const b of S.bubbles) {
+    const bx = x + b.x * w;
+    const by = y + ((b.y - (S.t * b.s * 0.05) % 1) + 1) % 1 * h;
+    ctx.beginPath();
+    ctx.arc(bx, by, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(140,200,220,0.30)';
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* -------------------------------------------------------- cutaway view  */
+
+/* Draws the cylinder in section inside the box {x,y,w,h}. The rod foot stays
+   planted on the anvil and the barrel descends as the damper compresses, which
+   is what actually happens: the load is bolted to the barrel. `detail` adds the
+   valve manifold, gauge and callouts. Returns the barrel geometry so callers
+   can hang a mass off the top of it. */
+function drawCutaway(ctx, box, detail) {
+  const H    = box.h;
+  const cx   = box.x + box.w * (detail ? (box.w < 420 ? 0.29 : 0.36) : 0.5);
+  const barW = Math.min(box.w * (detail ? 0.24 : 0.42), H * 0.19);
+  const wall = Math.max(3, barW * 0.11);
+  const frac = Math.min(1, S.x / STROKE);        // 0 extended, 1 bottomed
+
+  // Fixed parts: anvil, foot, rod, piston.
+  const anvilY   = box.y + H * 0.92;
+  const footH    = Math.max(5, H * 0.035);
+  const footTop  = anvilY - footH;
+  const rodLen   = H * 0.34;
+  const pistonH  = Math.max(7, H * 0.05);
+  const pistonB  = footTop - rodLen;
+  const pistonT  = pistonB - pistonH;
+
+  // Moving parts: cap chamber shrinks, so the barrel slides down over the rod.
+  const chamFull = H * 0.28;
+  const cham     = chamFull * (1 - frac);
+  const barTop   = pistonT - cham - wall;
+  const barH     = 2 * wall + chamFull + pistonH;
+  const inner    = barW - 2 * wall;
+
+  // anvil
+  ctx.fillStyle = '#0e2b36';
+  ctx.fillRect(box.x + box.w * 0.04, anvilY, box.w * (detail ? 0.62 : 0.92), H * 0.07);
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.strokeRect(box.x + box.w * 0.04 + 0.5, anvilY + 0.5,
+                 box.w * (detail ? 0.62 : 0.92) - 1, H * 0.07 - 1);
+
+  // rod and foot
+  const rodW = inner * 0.5;
+  ctx.fillStyle = '#7d9aa8';
+  ctx.fillRect(cx - rodW / 2, pistonB, rodW, footTop - pistonB);
+  ctx.fillStyle = COL.steelL;
+  rr(ctx, cx - barW * 0.58, footTop, barW * 1.16, footH, 2);
+  ctx.fill();
+
+  // head-side volume (below piston, vented to sea)
+  ctx.fillStyle = '#0a2733';
+  ctx.fillRect(cx - inner / 2, pistonB, inner, (barTop + barH - wall) - pistonB);
+
+  // cap chamber water, tinted by pressure
+  const pn = Math.min(1, Math.max(0, S.p / 3.0e7));
+  const wg = ctx.createLinearGradient(0, barTop, 0, pistonT);
+  wg.addColorStop(0, '#0d4b63');
+  wg.addColorStop(1, pn > 0.02 ? mix('#0d4b63', '#ff8a2e', pn * 0.8) : '#0d4b63');
+  ctx.fillStyle = wg;
+  ctx.fillRect(cx - inner / 2, barTop + wall, inner, Math.max(0, cham));
+
+  // barrel walls
+  ctx.fillStyle = COL.steelD;
+  ctx.fillRect(cx - barW / 2, barTop, wall, barH);
+  ctx.fillRect(cx + barW / 2 - wall, barTop, wall, barH);
+  ctx.fillRect(cx - barW / 2, barTop, barW, wall);
+  ctx.fillRect(cx - barW / 2, barTop + barH - wall, barW, wall);
+  ctx.strokeStyle = COL.steel; ctx.lineWidth = 1;
+  ctx.strokeRect(cx - barW / 2 + 0.5, barTop + 0.5, barW - 1, barH - 1);
+
+  // piston
+  ctx.fillStyle = COL.steelL;
+  ctx.fillRect(cx - inner / 2, pistonT, inner, pistonH);
+  ctx.fillStyle = COL.steelD;
+  for (let i = 1; i < 4; i++) {
+    ctx.fillRect(cx - inner / 2, pistonT + pistonH * i / 4 - 1, inner, 1.5);
+  }
+
+  const geo = { cx: cx, barTop: barTop, barW: barW, barH: barH, anvilY: anvilY };
+  if (!detail) return geo;
+
+  /* ---- valve manifold: fixed on the page, piped to the moving cap port ---- */
+  const mw = box.w * 0.30;
+  const mx = box.x + box.w * 0.62;
+  const my = box.y + H * 0.20;
+  const mh = H * 0.42;
+
+  ctx.strokeStyle = COL.steel;
+  ctx.lineWidth = Math.max(3, H * 0.013);
+  ctx.beginPath();
+  ctx.moveTo(cx + barW / 2 - wall, barTop + wall * 1.7);
+  ctx.lineTo(mx - mw * 0.22, barTop + wall * 1.7);
+  ctx.lineTo(mx - mw * 0.22, my + mh * 0.16);
+  ctx.lineTo(mx, my + mh * 0.16);
+  ctx.stroke();
+
+  ctx.fillStyle = COL.panel;
+  ctx.strokeStyle = COL.line;
+  ctx.lineWidth = 1;
+  rr(ctx, mx, my, mw, mh, 3);
+  ctx.fill(); ctx.stroke();
+
+  const tight = mw < 130;
+  const rows = [
+    { name: tight ? 'ORIFICE' : 'METERING ORIFICE', open: !S.blocked && orificeArea() > 1e-9,
+      note: S.mode === 'bench' ? P.valve.toFixed(0) + ' % open'
+                               : P.orifice.toFixed(1) + ' mm' },
+    { name: tight ? 'RELIEF' : 'RELIEF VALVE', open: !S.blocked && S.p > reliefSet(),
+      note: (reliefSet() / 1e5).toFixed(0) + ' bar' },
+    { name: tight ? 'CHECK' : 'PILOT CHECK', open: !S.blocked,
+      note: S.blocked ? 'blocked' : 'refill' }
+  ];
+  const fs = tight ? 9 : 10;
+  const rh = mh / 3;
+  rows.forEach(function (r, i) {
+    const ry = my + rh * i;
+    ctx.strokeStyle = COL.line;
+    if (i) { ctx.beginPath(); ctx.moveTo(mx, ry); ctx.lineTo(mx + mw, ry); ctx.stroke(); }
+    const col = r.open ? COL.sonar : COL.dim;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(mx + 12, ry + rh / 2, 3.4, 0, Math.PI * 2);
+    ctx.fill();
+    label(ctx, r.name, mx + 21, ry + rh / 2 - 6, r.open ? COL.chalk : COL.dim, fs);
+    label(ctx, r.note, mx + 21, ry + rh / 2 + 7, col, fs);
+  });
+
+  /* ---- jets leaving the metered port ---- */
+  const jx = mx + mw;
+  const jy = my + rh * 0.5;
+  if (S.jet > 0.02) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, S.jet);
+    for (let i = 0; i < 10; i++) {
+      const ph = (S.t * 2.2 + i * 0.1) % 1;
+      const len = box.w * 0.09 * S.jet;
+      ctx.beginPath();
+      ctx.arc(jx + ph * len + 4, jy + Math.sin(i * 2.1 + S.t * 6) * 5 * ph, 2.6 * (1 - ph) + 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(111,182,221,' + (0.8 * (1 - ph)) + ')';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /* ---- gauge ---- */
+  const gx = mx + mw * 0.5, gy = my + mh + H * 0.14, gr = Math.min(box.w * 0.075, H * 0.10);
+  ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI * 2);
+  ctx.fillStyle = COL.deep; ctx.fill();
+  ctx.strokeStyle = COL.lineHi; ctx.lineWidth = 1.5; ctx.stroke();
+  const pmax = 6e7;
+  const frac2 = Math.min(1, Math.max(0, S.p / pmax));
+  const a0 = Math.PI * 0.78, a1 = Math.PI * 2.22;
+  ctx.beginPath(); ctx.arc(gx, gy, gr - 4, a0, a1);
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(gx, gy, gr - 4, a0, a0 + (a1 - a0) * frac2);
+  ctx.strokeStyle = frac2 > 0.66 ? COL.alarm : COL.safety; ctx.lineWidth = 2.5; ctx.stroke();
+  const ang = a0 + (a1 - a0) * frac2;
+  ctx.beginPath(); ctx.moveTo(gx, gy);
+  ctx.lineTo(gx + Math.cos(ang) * (gr - 7), gy + Math.sin(ang) * (gr - 7));
+  ctx.strokeStyle = COL.chalk; ctx.lineWidth = 1.6; ctx.stroke();
+  label(ctx, (S.p / 1e5).toFixed(0), gx, gy + gr + 11, COL.mist, 10, 'center');
+  label(ctx, 'bar', gx, gy + gr + 22, COL.dim, 8.5, 'center');
+
+  /* ---- callouts (need clear space to the left of the barrel) ---- */
+  if (box.w > 380) {
+    if (cham > 12) label(ctx, 'CAP VOLUME', cx - barW / 2 - 8, barTop + wall + cham / 2, COL.dim, 9, 'right');
+    label(ctx, 'PISTON', cx - barW / 2 - 8, pistonT + pistonH / 2, COL.dim, 9, 'right');
+    label(ctx, 'ROD', cx - barW / 2 - 8, pistonB + rodLen * 0.6, COL.dim, 9, 'right');
+  }
+  label(ctx, 'ANVIL', box.x + box.w * 0.05, anvilY + H * 0.035, COL.dim, 9);
+
+  return geo;
+}
+
+function mix(a, b, t) {
+  const pa = [parseInt(a.substr(1, 2), 16), parseInt(a.substr(3, 2), 16), parseInt(a.substr(5, 2), 16)];
+  const pb = [parseInt(b.substr(1, 2), 16), parseInt(b.substr(3, 2), 16), parseInt(b.substr(5, 2), 16)];
+  const c = pa.map(function (v, i) { return Math.round(v + (pb[i] - v) * t); });
+  return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+}
+
+/* --------------------------------------------------------- landing scene */
+
+function drawLanding(w, h) {
+  const ctx = sctx;
+  const surfH = Math.round(h * 0.22);
+  const gapH  = 16;
+  const seaY  = surfH + gapH;
+
+  // world mapping: foundation top at zw = 0. Set up first so the crane can be
+  // parked directly over the module's lift point.
+  const viewW = 15, viewTop = 7.6, viewBot = -1.7;
+  const sc = Math.min(w / viewW, (h - seaY) / (viewTop - viewBot));
+  const ox = w * 0.34, oy = h - (0 - viewBot) * sc - 4;
+  const X = function (m) { return ox + m * sc; };
+  const Y = function (m) { return oy - m * sc; };
+  const hookX = X(0);
+
+  /* --- surface band: vessel and crane --- */
+  const sky = ctx.createLinearGradient(0, 0, 0, surfH * 0.44);
+  sky.addColorStop(0, '#0a2634'); sky.addColorStop(1, '#123c4d');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, w, surfH * 0.44);
+  drawWater(ctx, 0, surfH * 0.44, w, surfH - surfH * 0.44, '#0d3a4e');
+
+  // waves
+  const wl = 2 * Math.PI / P.period;
+  ctx.beginPath();
+  ctx.moveTo(0, surfH * 0.44);
+  for (let i = 0; i <= w; i += 6) {
+    ctx.lineTo(i, surfH * 0.44 + Math.sin(i * 0.03 + S.t * 1.4) * 3.4 + Math.sin(i * 0.011 - S.t) * 2.2);
+  }
+  ctx.lineTo(w, surfH * 0.44); ctx.strokeStyle = COL.lineHi; ctx.lineWidth = 1.4; ctx.stroke();
+
+  // vessel heaving
+  const heaveY = -P.heave * Math.sin(wl * S.t) * 7;
+  const vx = w * 0.16, vy = surfH * 0.44 + heaveY;
+  ctx.fillStyle = COL.steelD;
+  ctx.beginPath();
+  ctx.moveTo(vx - 78, vy - 16); ctx.lineTo(vx + 78, vy - 16);
+  ctx.lineTo(vx + 66, vy + 9); ctx.lineTo(vx - 68, vy + 9);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = COL.steel;
+  ctx.fillRect(vx - 62, vy - 32, 40, 16);
+  // crane boom out to the lift point
+  ctx.strokeStyle = COL.safety; ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(vx + 10, vy - 16); ctx.lineTo(vx + 24, vy - 62); ctx.lineTo(hookX, vy - 40);
+  ctx.stroke();
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(vx + 24, vy - 62); ctx.lineTo(vx + 58, vy - 16); ctx.stroke();
+
+  /* --- depth break --- */
+  ctx.fillStyle = COL.abyss; ctx.fillRect(0, surfH, w, gapH);
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  for (const yy of [surfH + 4, surfH + gapH - 4]) {
+    ctx.beginPath();
+    for (let i = 0; i <= w; i += 14) {
+      ctx.lineTo(i, yy + (Math.floor(i / 14) % 2 ? -3 : 3));
+    }
+    ctx.stroke();
+  }
+  label(ctx, 'BREAK — ' + DEPTH + ' m OF WIRE OMITTED', w - 10, surfH + gapH / 2, COL.dim, 9, 'right');
+
+  /* --- seabed band --- */
+  drawWater(ctx, 0, seaY, w, h - seaY, '#0a2c3c');
+
+  // seabed
+  ctx.fillStyle = '#12242a';
+  ctx.beginPath();
+  ctx.moveTo(0, Y(-0.55));
+  for (let i = 0; i <= w; i += 10) ctx.lineTo(i, Y(-0.55) + Math.sin(i * 0.02) * 2.5);
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#0d1b20';
+  ctx.fillRect(0, Y(-1.1), w, h);
+
+  // foundation / template
+  ctx.fillStyle = '#123241';
+  ctx.fillRect(X(-6.6), Y(0), 13.2 * sc, 0.55 * sc);
+  ctx.strokeStyle = COL.lineHi; ctx.lineWidth = 1.2;
+  ctx.strokeRect(X(-6.6), Y(0), 13.2 * sc, 0.55 * sc);
+  for (let i = -6; i <= 6; i += 2) {
+    ctx.fillStyle = COL.line;
+    ctx.fillRect(X(i) - 1, Y(0), 2, 0.55 * sc);
+  }
+  label(ctx, 'FOUNDATION / TEMPLATE', X(-6.4), Y(0) + 0.28 * sc, COL.mist, 9.5);
+
+  /* --- module --- */
+  const zb = S.z;                      // mudmat underside, m above foundation
+  const mw = 8.0, mh = 3.6, mmT = 0.30;   // frame height and mudmat thickness
+  const mL = X(-mw / 2), mT = Y(zb + mmT + mh), mW = mw * sc, mH = mh * sc;
+
+  // wire, from above the break to the lift point
+  const liftY = mT;
+  const Wsub = P.mass * 1000 * G * (1 - RHO / RHO_ST);
+  const taut = (S.wireT || 0) > 0.10 * Wsub;
+  ctx.strokeStyle = taut ? '#b9cdd4' : COL.dim;
+  ctx.lineWidth = taut ? 2 : 1.6;
+  ctx.beginPath();
+  ctx.moveTo(hookX, vy - 40);
+  ctx.lineTo(hookX, surfH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(hookX, surfH + gapH);
+  if (taut) {
+    ctx.lineTo(X(0), liftY);
+  } else {
+    const sag = Math.min(40, 26);
+    ctx.bezierCurveTo(hookX, surfH + gapH + sag, X(0), liftY - sag, X(0), liftY);
+  }
+  ctx.stroke();
+  if (!taut) label(ctx, 'WIRE SLACK', X(0) + 10, liftY - 26, COL.safety, 9.5);
+
+  // lift point
+  ctx.fillStyle = COL.safety;
+  ctx.beginPath(); ctx.arc(X(0), liftY, 4, 0, Math.PI * 2); ctx.fill();
+
+  // protection frame
+  ctx.fillStyle = 'rgba(242,165,22,0.10)';
+  ctx.fillRect(mL, mT, mW, mH);
+  ctx.strokeStyle = COL.safety; ctx.lineWidth = 2.4;
+  ctx.strokeRect(mL, mT, mW, mH);
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = 'rgba(242,165,22,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(mL, mT + mH); ctx.lineTo(mL + mW * 0.5, mT);
+  ctx.lineTo(mL + mW, mT + mH); ctx.moveTo(mL, mT); ctx.lineTo(mL + mW, mT);
+  ctx.stroke();
+  // process equipment blocks
+  ctx.fillStyle = '#1c4a5c';
+  ctx.fillRect(mL + mW * 0.12, mT + mH * 0.40, mW * 0.28, mH * 0.46);
+  ctx.fillRect(mL + mW * 0.52, mT + mH * 0.28, mW * 0.34, mH * 0.58);
+  ctx.strokeStyle = COL.lineHi; ctx.lineWidth = 1;
+  ctx.strokeRect(mL + mW * 0.12, mT + mH * 0.40, mW * 0.28, mH * 0.46);
+  ctx.strokeRect(mL + mW * 0.52, mT + mH * 0.28, mW * 0.34, mH * 0.58);
+  // mudmat, sitting directly on top of the leg attachment plane
+  ctx.fillStyle = COL.steel;
+  ctx.fillRect(mL - 0.35 * sc, Y(zb + mmT), mW + 0.7 * sc, mmT * sc);
+  label(ctx, P.mass.toFixed(0) + ' t MODULE', mL, mT - 12, COL.safety, 10);
+
+  /* --- legs --- */
+  const legX = [-2.9, 2.9];
+  const legLen = LEG_EXT - S.x;
+  for (const lx of legX) {
+    const bx = X(lx), byTop = Y(zb);
+    const bw = Math.max(9, 0.34 * sc);
+    // barrel
+    ctx.fillStyle = S.rigid ? COL.steelD : '#1d4a5e';
+    ctx.fillRect(bx - bw / 2, byTop, bw, 0.62 * sc);
+    ctx.strokeStyle = S.rigid ? COL.steel : COL.lineHi;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(bx - bw / 2, byTop, bw, 0.62 * sc);
+    // rod
+    const rodTop = byTop + 0.62 * sc;
+    const rodLen = Math.max(0, legLen - 0.62) * sc;
+    ctx.fillStyle = '#7d9aa8';
+    ctx.fillRect(bx - bw * 0.28, rodTop, bw * 0.56, rodLen);
+    // foot, seated on the foundation
+    ctx.fillStyle = COL.steelL;
+    ctx.fillRect(bx - bw * 0.75, rodTop + rodLen - Math.max(4, 0.10 * sc),
+                 bw * 1.5, Math.max(4, 0.10 * sc));
+    // port jets
+    if (S.jet > 0.03 && !S.rigid) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.95, S.jet);
+      for (let i = 0; i < 6; i++) {
+        const ph = (S.t * 2.6 + i * 0.17) % 1;
+        const dir = i % 2 ? 1 : -1;
+        ctx.beginPath();
+        ctx.arc(bx + dir * (bw * 0.6 + ph * 26 * S.jet), byTop + 5 + Math.sin(i + S.t * 8) * 4,
+                2.4 * (1 - ph) + 0.7, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(111,182,221,' + (0.75 * (1 - ph)) + ')';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // impact flash + silt puff
+  if (S.flash > 0) {
+    ctx.save();
+    ctx.globalAlpha = S.flash * 0.5;
+    for (const lx of legX) {
+      ctx.beginPath();
+      ctx.arc(X(lx), Y(0), (1 - S.flash) * 34 + 6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(200,180,140,0.55)';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // stroke annotation
+  if (S.contact) {
+    const ax = X(4.9);
+    ctx.strokeStyle = COL.sonar; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(ax, Y(LEG_EXT)); ctx.lineTo(ax, Y(LEG_EXT - S.x));
+    ctx.moveTo(ax - 5, Y(LEG_EXT)); ctx.lineTo(ax + 5, Y(LEG_EXT));
+    ctx.moveTo(ax - 5, Y(LEG_EXT - S.x)); ctx.lineTo(ax + 5, Y(LEG_EXT - S.x));
+    ctx.stroke();
+    label(ctx, (S.x * 1000).toFixed(0) + ' mm', ax + 9, Y(LEG_EXT - S.x / 2), COL.sonar, 10);
+  }
+
+  /* --- cutaway inset: needs room, so it is dropped on narrow canvases --- */
+  if (w < 620) return;
+  const iw = Math.min(300, w * 0.31), ih = (h - seaY) * 0.86;
+  const ix = w - iw - 12, iy = seaY + (h - seaY) * 0.07;
+  ctx.fillStyle = 'rgba(6,28,38,0.90)';
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  rr(ctx, ix, iy, iw, ih, 3); ctx.fill(); ctx.stroke();
+  label(ctx, 'LEG DETAIL — NOT TO SCALE', ix + 10, iy + 13, COL.dim, 9);
+  drawCutaway(ctx, { x: ix, y: iy + 18, w: iw, h: ih - 24 }, true);
+}
+
+/* ----------------------------------------------------------- bench scene */
+
+function drawBench(w, h) {
+  const ctx = sctx;
+  drawWater(ctx, 0, 0, w, h, '#0a2c3c');
+
+  const box = { x: w * 0.05, y: h * 0.19, w: w * 0.90, h: h * 0.74 };
+  const frac = Math.min(1, S.x / STROKE);
+
+  const geo = drawCutaway(ctx, box, true);
+  const px = geo.cx;
+
+  const tightScene = w < 620;
+
+  // guide rails
+  const railW = Math.min(Math.max(geo.barW * 3.4, box.w * 0.20), box.w * 0.40);
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.moveTo(px - railW / 2, box.y - h * 0.10); ctx.lineTo(px - railW / 2, geo.anvilY);
+  ctx.moveTo(px + railW / 2, box.y - h * 0.10); ctx.lineTo(px + railW / 2, geo.anvilY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // drop mass, bolted to the barrel and moving with it
+  const massW = railW * 0.94, massH = h * 0.105;
+  const mx = px - massW / 2, my = geo.barTop - massH;
+  ctx.fillStyle = 'rgba(242,165,22,0.12)';
+  ctx.fillRect(mx, my, massW, massH);
+  ctx.strokeStyle = COL.safety; ctx.lineWidth = 2.2;
+  ctx.strokeRect(mx, my, massW, massH);
+  ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(242,165,22,0.42)';
+  ctx.beginPath();
+  ctx.moveTo(mx, my + massH); ctx.lineTo(mx + massW, my);
+  ctx.moveTo(mx, my); ctx.lineTo(mx + massW, my + massH);
+  ctx.stroke();
+  label(ctx, P.dmass.toFixed(1) + ' t', px, my + massH / 2, COL.safety, 13, 'center');
+
+  // velocity arrow, alongside the mass
+  if (Math.abs(S.v) > 0.004) {
+    const up = S.v > 0;
+    const ax = mx + massW + 16, ay = my + massH / 2;
+    const L = Math.min(44, 12 + Math.abs(S.v) * 55);
+    const col = up ? COL.sonar : COL.ice;
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay + (up ? L / 2 : -L / 2));
+    ctx.lineTo(ax, ay + (up ? -L / 2 : L / 2));
+    ctx.stroke();
+    const ty = ay + (up ? -L / 2 : L / 2);
+    ctx.beginPath();
+    ctx.moveTo(ax, ty);
+    ctx.lineTo(ax - 4, ty + (up ? 7 : -7));
+    ctx.lineTo(ax + 4, ty + (up ? 7 : -7));
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+    label(ctx, Math.abs(S.v).toFixed(3) + ' m/s', ax + 9, ay, col, 10);
+  }
+
+  // On a narrow canvas the banner above already says this, so it is dropped.
+  if ((S.blocked || orificeArea() < 1e-9) && !tightScene) {
+    const V = Math.max(V_DEAD, V_CAP0 - A_P * S.x);
+    const dV = Math.max(0, S.p) * V / effectiveBeta(S.p + P_AMB);
+    const lx = box.x + box.w * 0.62, ly = box.y + box.h * 0.045;
+    label(ctx, 'FLOW ARRESTED', lx, ly, COL.alarm, 11);
+    label(ctx, 'water squeezed by ' + (100 * dV / V).toFixed(3) + ' % of its volume',
+          lx, ly + 15, COL.mist, 10);
+  }
+
+  /* ---- stroke gauges and energy budget: the readout rail carries the same
+         numbers, so they are dropped when the canvas has no room ---------- */
+  if (tightScene) return;
+
+  const gx = box.x + box.w * 0.055, gy = box.y + box.h * 0.16, gh = box.h * 0.44;
+  const bars = [
+    { x: gx,      cap: 'TRUE',  f: frac },
+    { x: gx + 26, cap: 'x100', f: Math.min(1, frac * 100) }
+  ];
+  label(ctx, 'STROKE', gx - 4, gy - 22, COL.dim, 9);
+  for (const b of bars) {
+    ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+    ctx.strokeRect(b.x - 4.5, gy + 0.5, 9, gh);
+    ctx.fillStyle = b.cap === 'TRUE' ? COL.sonar : 'rgba(53,214,189,0.45)';
+    ctx.fillRect(b.x - 3, gy + 1, 6, Math.max(1, gh * b.f));
+    label(ctx, b.cap, b.x, gy - 8, COL.dim, 8.5, 'center');
+  }
+  label(ctx, (S.x * 1000).toFixed(2) + ' mm', gx - 4, gy + gh + 14, COL.sonar, 10.5);
+  label(ctx, 'of 600 mm available', gx - 4, gy + gh + 27, COL.dim, 9);
+  label(ctx, 'peak ' + (S.peakX * 1000).toFixed(2) + ' mm', gx - 4, gy + gh + 40, COL.mist, 9);
+
+  /* ---- energy split: dissipated as heat vs handed back to the load ------- */
+  const ex = gx - 4, ey = box.y + box.h * 0.80, ew = box.w * 0.24, eh = 9;
+  const tot = Math.max(1, S.eIn);
+  const dFrac = Math.min(1, S.eDiss / tot);
+  label(ctx, 'ENERGY BUDGET', ex, ey - 14, COL.dim, 9);
+  ctx.fillStyle = COL.line; ctx.fillRect(ex, ey, ew, eh);
+  ctx.fillStyle = COL.sonar; ctx.fillRect(ex, ey, ew * dFrac, eh);
+  ctx.fillStyle = COL.safety; ctx.fillRect(ex + ew * dFrac, ey, ew * (1 - dFrac), eh);
+  label(ctx, 'DISSIPATED ' + (S.eDiss / 1e3).toFixed(1) + ' kJ', ex, ey + eh + 12, COL.sonar, 9);
+  label(ctx, 'RETURNED ' + (Math.max(0, S.eIn - S.eDiss) / 1e3).toFixed(1) + ' kJ',
+        ex, ey + eh + 24, COL.safety, 9);
+}
+
+/* ---------------------------------------------------------- trace charts */
+
+function drawTraces() {
+  const { w, h } = fitCanvas(tracesC, tctx);
+  tctx.clearRect(0, 0, w, h);
+
+  const pad = { l: 46, r: 12, t: 8, b: 18 };
+  const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+  const lanes = 3, lh = ih / lanes;
+
+  const WIN = 6;
+  const t1 = Math.max(WIN, S.t), t0 = t1 - WIN;
+
+  tctx.strokeStyle = COL.line; tctx.lineWidth = 1;
+  for (let i = 0; i <= lanes; i++) {
+    const y = Math.round(pad.t + lh * i) + 0.5;
+    tctx.beginPath(); tctx.moveTo(pad.l, y); tctx.lineTo(pad.l + iw, y); tctx.stroke();
+  }
+  for (let s = Math.ceil(t0); s <= t1; s++) {
+    const x = Math.round(pad.l + (s - t0) / WIN * iw) + 0.5;
+    tctx.strokeStyle = 'rgba(20,64,79,0.7)';
+    tctx.beginPath(); tctx.moveTo(x, pad.t); tctx.lineTo(x, pad.t + ih); tctx.stroke();
+    label(tctx, s.toFixed(0) + 's', x, h - 8, COL.dim, 9, 'center');
+  }
+
+  const fmax = Math.max(400e3, S.peakF * 1.15);
+  const pmax = Math.max(60e5, S.peakP * 1.15);
+  const vmax = Math.max(0.6, S.vImpact * 1.2);
+
+  const series = [
+    { key: 'F', col: COL.safety, max: fmax, unit: 'kN',  scale: 1e-3, name: 'LEG LOAD' },
+    { key: 'p', col: COL.ice,    max: pmax, unit: 'bar', scale: 1e-5, name: 'CHAMBER PRESSURE' },
+    { key: 'v', col: COL.sonar,  max: vmax, unit: 'm/s', scale: 1,    name: 'DESCENT RATE' }
+  ];
+
+  series.forEach(function (s, i) {
+    const y0 = pad.t + lh * i, y1 = y0 + lh;
+    const dp = s.unit === 'm/s' ? 2 : 0;
+    label(tctx, (s.max * s.scale).toFixed(dp), pad.l - 6, y0 + 9, COL.dim, 9, 'right');
+    label(tctx, '0', pad.l - 6, y1 - 6, COL.dim, 9, 'right');
+    label(tctx, s.name + '  ' + s.unit, pad.l + iw - 8, y0 + 10, COL.dim, 9, 'right');
+
+    tctx.beginPath();
+    let started = false;
+    for (const pt of S.trace) {
+      if (pt.t < t0) continue;
+      const x = pad.l + (pt.t - t0) / WIN * iw;
+      const y = y1 - 3 - Math.min(1, Math.max(0, pt[s.key] / s.max)) * (lh - 6);
+      if (!started) { tctx.moveTo(x, y); started = true; } else tctx.lineTo(x, y);
+    }
+    tctx.strokeStyle = s.col; tctx.lineWidth = 1.6; tctx.stroke();
+
+    if (started) {
+      const last = S.trace[S.trace.length - 1];
+      const x = pad.l + (Math.min(last.t, t1) - t0) / WIN * iw;
+      const y = y1 - 3 - Math.min(1, Math.max(0, last[s.key] / s.max)) * (lh - 6);
+      tctx.beginPath(); tctx.arc(x, y, 2.6, 0, Math.PI * 2);
+      tctx.fillStyle = s.col; tctx.fill();
+    }
+  });
+}
+
+/* =====================================================================
+   Readouts
+   ===================================================================== */
+
+const READOUTS = {
+  landing: [
+    { id: 'vnow',  k: 'Descent rate', cls: 'son' },
+    { id: 'vimp',  k: 'At first contact', cls: '' },
+    { id: 'force', k: 'Leg load', cls: 'acc' },
+    { id: 'press', k: 'Chamber pressure', cls: '' },
+    { id: 'strk',  k: 'Stroke used', cls: '' },
+    { id: 'wire',  k: 'Wire tension', cls: '' },
+    { id: 'cmp',   k: 'Peak load vs rigid legs', cls: '', wide: true }
+  ],
+  bench: [
+    { id: 'press', k: 'Chamber pressure', cls: 'acc' },
+    { id: 'strk',  k: 'Piston travel', cls: 'son' },
+    { id: 'dvol',  k: 'Water compressed', cls: '' },
+    { id: 'disp',  k: 'Fluid expelled', cls: '' },
+    { id: 'beta',  k: 'Effective bulk modulus', cls: '' },
+    { id: 'stiff', k: 'Lock stiffness', cls: '' },
+    { id: 'engy',  k: 'Energy dissipated / returned', cls: '', wide: true }
+  ]
+};
+
+function buildReadouts() {
+  const host = document.getElementById('readouts');
+  host.innerHTML = '';
+  for (const r of READOUTS[S.mode]) {
+    const d = document.createElement('div');
+    d.className = 'ro' + (r.wide ? ' wide' : '');
+    d.innerHTML = '<span class="ro-k">' + r.k + '</span>' +
+                  '<div class="ro-v ' + r.cls + '" id="ro-' + r.id + '">&ndash;</div>' +
+                  '<div class="ro-note" id="ron-' + r.id + '"></div>';
+    host.appendChild(d);
+  }
+}
+
+function set(id, html) {
+  const el = document.getElementById('ro-' + id);
+  if (el) el.innerHTML = html;
+}
+function note(id, txt) {
+  const el = document.getElementById('ron-' + id);
+  if (el) el.textContent = txt;
+}
+function u(v, unit) { return v + '<small>' + unit + '</small>'; }
+
+function updateReadouts() {
+  if (S.mode === 'landing') {
+    set('vnow',  u((S.contact ? Math.max(0, -S.v) : Math.abs(S.v)).toFixed(3), 'm/s'));
+    set('vimp',  S.vImpact > 0 ? u(S.vImpact.toFixed(3), 'm/s') : '&ndash;');
+    set('force', u(((S.legF || 0) / 1e3).toFixed(0), 'kN'));
+    set('press', u((S.p / 1e5).toFixed(0), 'bar'));
+    set('strk',  u((S.x * 1000).toFixed(0), 'mm'));
+    set('wire',  u(((S.wireT || 0) / 1e3).toFixed(0), 'kN'));
+    note('press', 'peak ' + (S.peakP / 1e5).toFixed(0) + ' bar');
+    note('strk',  (100 * S.peakX / STROKE).toFixed(0) + ' % of 600 mm');
+    const Wsub = P.mass * 1000 * G * (1 - RHO / RHO_ST);
+    note('wire',  (S.wireT || 0) > 0.10 * Wsub
+                    ? 'taut — ' + (100 * S.wireT / Wsub).toFixed(0) + ' % of submerged weight'
+                    : 'slack — the legs carry the module');
+
+    const meff = P.mass * 1000 * (1 + ADDED_M);
+    const rigid = S.vImpact * Math.sqrt(K_STEEL * meff);
+    if (S.peakF > 0 && S.vImpact > 0) {
+      const cut = 100 * (1 - S.peakF / rigid);
+      set('cmp', u((S.peakF / 1e3).toFixed(0), 'kN') +
+                 '<small style="margin-left:8px">peak</small>');
+      note('cmp', 'Rigid steel legs at the same impact speed: ' +
+                  (rigid / 1e3).toFixed(0) + ' kN  (' +
+                  (cut > 0 ? '−' + cut.toFixed(0) + ' %' : '+' + (-cut).toFixed(0) + ' %') + ')' +
+                  (S.rigid ? '  — rigid legs fitted' : ''));
+    } else {
+      set('cmp', '&ndash;');
+      note('cmp', 'Waiting for first contact.');
+    }
+  } else {
+    const V = Math.max(V_DEAD, V_CAP0 - A_P * S.x);
+    const bet = effectiveBeta(S.p + P_AMB);
+    const dV = Math.max(0, S.p) * V / bet;
+    const k = bet * A_P * A_P / V;
+
+    set('press', u((S.p / 1e5).toFixed(0), 'bar'));
+    set('strk',  u((S.x * 1000).toFixed(2), 'mm'));
+    set('dvol',  u((100 * dV / V).toFixed(3), '%'));
+    set('disp',  u((S.vOut * 1000).toFixed(2), 'L'));
+    set('beta',  u((bet / 1e9).toFixed(2), 'GPa'));
+    set('stiff', u((k / 1e6).toFixed(1), 'MN/m'));
+    note('press', 'peak ' + (S.peakP / 1e5).toFixed(0) + ' bar');
+    note('strk',  'peak ' + (S.peakX * 1000).toFixed(2) + ' mm of 600');
+    note('beta',  P.air > 0 ? P.air.toFixed(2) + ' % air at ambient' : 'gas-free seawater');
+    note('stiff', 'natural frequency ' +
+         (Math.sqrt(k / (P.dmass * 1000)) / (2 * Math.PI)).toFixed(1) + ' Hz');
+
+    const ret = Math.max(0, S.eIn - S.eDiss);
+    set('engy', u((S.eDiss / 1e3).toFixed(1), 'kJ') +
+                '<span style="color:var(--dim);margin:0 8px">/</span>' +
+                u((ret / 1e3).toFixed(1), 'kJ'));
+    const c = Math.sqrt(bet / RHO);
+    note('engy', 'Bounces: ' + S.bounces +
+                 '  ·  wave speed ' + c.toFixed(0) + ' m/s' +
+                 '  ·  Joukowsky at 1 m/s line change: ' +
+                 (RHO * c / 1e5).toFixed(0) + ' bar');
+  }
+
+  // banner
+  const b = document.getElementById('banner');
+  let msg = '';
+  if (S.mode === 'bench' && (S.blocked || orificeArea() < 1e-9)) {
+    msg = S.blocked ? 'Ports blocked — hydraulic lock' : 'Metering valve shut — hydraulic lock';
+  } else if (S.mode === 'landing' && S.rigid) {
+    msg = 'Rigid legs — dampers bypassed';
+  } else if (S.x > STROKE * 0.998) {
+    msg = 'Stroke exhausted — seated on end stops';
+  }
+  b.textContent = msg;
+  b.classList.toggle('on', !!msg);
+
+  const narrow = scene.clientWidth < 620;
+  document.getElementById('stageTag').textContent =
+    S.mode === 'landing'
+      ? (narrow ? 'Side elevation · ' + DEPTH + ' m depth'
+                : 'Side elevation · ' + DEPTH + ' m water depth · leg detail enlarged')
+      : (narrow ? 'Drop-test bench · section'
+                : 'Drop-test bench · cylinder shown in section, enlarged');
+}
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+
+function fmtVal(c) {
+  const v = P[c.id];
+  const dec = c.step < 0.1 ? 2 : (c.step < 1 ? 1 : 0);
+  return v.toFixed(dec) + ' ' + c.unit;
+}
+
+function buildControls() {
+  const host = document.getElementById('controls');
+  host.innerHTML = '';
+  for (const c of CONTROLS[S.mode]) {
+    const row = document.createElement('div');
+    row.className = 'ctl-row';
+    const id = 'sl-' + c.id;
+    row.innerHTML =
+      '<label for="' + id + '">' + c.label + '<b id="v-' + c.id + '">' + fmtVal(c) + '</b></label>' +
+      '<input type="range" id="' + id + '" min="' + c.min + '" max="' + c.max +
+      '" step="' + c.step + '" value="' + P[c.id] + '">';
+    host.appendChild(row);
+    const input = row.querySelector('input');
+    input.addEventListener('input', function () {
+      P[c.id] = parseFloat(input.value);
+      document.getElementById('v-' + c.id).textContent = fmtVal(c);
+      // changing the rig means the run so far is no longer comparable
+      if (['mass', 'period', 'heave', 'lower', 'dmass', 'vimp'].indexOf(c.id) >= 0) reset();
+    });
+  }
+}
+
+function buildTransport() {
+  const host = document.getElementById('transport');
+  host.innerHTML = '';
+  const mk = function (txt, cls, fn) {
+    const b = document.createElement('button');
+    b.className = 'act ' + (cls || '');
+    b.textContent = txt;
+    b.addEventListener('click', fn);
+    host.appendChild(b);
+    return b;
+  };
+
+  const runBtn = mk(S.running ? 'Pause' : 'Run', 'primary', function () {
+    S.running = !S.running;
+    runBtn.textContent = S.running ? 'Pause' : 'Run';
+  });
+  mk('Reset', '', function () { reset(); S.running = true; runBtn.textContent = 'Pause'; });
+
+  if (S.mode === 'landing') {
+    const t = mk('Rigid legs', S.rigid ? 'toggled' : '', function () {
+      S.rigid = !S.rigid;
+      t.classList.toggle('toggled', S.rigid);
+      reset();
+    });
+  } else {
+    mk('Drop again', '', function () { reset(); S.running = true; runBtn.textContent = 'Pause'; });
+    const t = mk('Block ports', 'danger ' + (S.blocked ? 'on' : ''), function () {
+      S.blocked = !S.blocked;
+      t.classList.toggle('on', S.blocked);
+    });
+  }
+}
+
+function buildSpeed() {
+  const host = document.getElementById('speed');
+  host.innerHTML = '';
+  for (const s of [1, 0.25, 0.05]) {
+    const b = document.createElement('button');
+    b.textContent = s === 1 ? 'x1' : 'x' + s;
+    b.className = S.speed === s ? 'on' : '';
+    b.addEventListener('click', function () {
+      S.speed = s;
+      host.querySelectorAll('button').forEach(function (o) { o.classList.remove('on'); });
+      b.classList.add('on');
+    });
+    host.appendChild(b);
+  }
+}
+
+function setMode(m) {
+  S.mode = m;
+  S.blocked = false;
+  S.rigid = false;
+  if (m === 'bench' && S.speed === 1) S.speed = 0.25;
+  document.querySelectorAll('.mode').forEach(function (b) {
+    const on = b.dataset.mode === m;
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  buildReadouts(); buildControls(); buildTransport(); buildSpeed();
+  reset();
+  S.running = true;
+}
+
+document.querySelectorAll('.mode').forEach(function (b) {
+  b.addEventListener('click', function () { setMode(b.dataset.mode); });
+});
+
+/* =====================================================================
+   Loop
+   ===================================================================== */
+
+let lastT = performance.now();
+
+function frame(now) {
+  const wall = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+
+  if (S.running) {
+    const n = Math.min(MAX_SUB, Math.round(wall * S.speed / DT));
+    for (let i = 0; i < n; i++) step(DT);
+  }
+
+  const { w, h } = fitCanvas(scene, sctx);
+  sctx.clearRect(0, 0, w, h);
+  if (S.mode === 'landing') drawLanding(w, h); else drawBench(w, h);
+  drawTraces();
+  updateReadouts();
+
+  requestAnimationFrame(frame);
+}
+
+setMode('landing');
+requestAnimationFrame(frame);
+
+})();
+</script>
