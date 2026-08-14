@@ -62,6 +62,44 @@ The **entrained air** slider is the other interesting one. Half a percent of gas
 incompressibility assumption at low pressure and gives the strut a soft-then-hard
 characteristic — exactly why these cylinders are bled carefully in commissioning.
 
+### 3. Valve detail
+
+All three valves opened up in section, with internals that move with the live state.
+
+**POC-104A/B — double pilot-operated check.** A ball check blocks one way only, so one cartridge
+alone would hold the load up but let the cylinder be pulled apart. Two are fitted back to back,
+each opened by pressure on the other side through a cross pilot. Vent the pilot and both balls
+drop onto their seats at once — the pushrods visibly retract when you hit **Port block**.
+
+**NV-101 — needle metering valve.** The cone lifts off its seat with commanded travel, beside a
+plot of the trim characteristic (modified equal percentage, R = 50) with the live operating point
+marked. This is where the "half travel is only 12 % of area" behaviour comes from.
+
+**PSV-102 — direct-acting relief.** The poppet lifts against its spring past the setting, with a
+flow-against-inlet-pressure plot showing the cracking point and override slope. Engaging the port
+block shows it going *isolated*, because it sits downstream of the lock.
+
+### 4. P&ID
+
+The same circuit as an engineering sheet: tagged equipment and valves, line numbers with size and
+spec, instrument bubbles, a valve schedule, notes, legend and title block.
+
+It is live. PI-105 reads chamber pressure, ZT-107 piston travel, FI-108 line flow; the pipe runs
+animate in the direction the water is going; the schedule's status column updates as valves open,
+seat and isolate. Shut the port block and the whole sheet goes dead downstream of POC-104A/B.
+
+Tags are consistent across every view — the needle shown in section as NV-101 is the same one on
+the circuit diagram and in the schedule.
+
+| Tag | Service |
+|---|---|
+| DMP-101 | Soft-landing cylinder, 180/90 × 600 |
+| POC-104A/B | Double pilot-operated check, load holding |
+| NV-101 | Needle metering valve |
+| PSV-102 | Pressure relief valve |
+| CV-103 | Refill check valve |
+| PI-105 / ZT-107 / FI-108 | Pressure, position, flow |
+
 ### Closing time and surge
 
 A valve that shuts instantly is a modelling convenience that hides the most important

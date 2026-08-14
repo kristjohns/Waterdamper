@@ -89,11 +89,12 @@
 
   .modes {
     display: flex;
+    flex-wrap: wrap;
     gap: 0;
     border: 1px solid var(--line-hi);
     border-radius: var(--radius);
     overflow: hidden;
-    flex-shrink: 0;
+    max-width: 100%;
   }
 
   .mode {
@@ -460,6 +461,8 @@
     <nav class="modes" role="tablist" aria-label="Simulation mode">
       <button class="mode is-on" data-mode="landing" role="tab" aria-selected="true">Landing</button>
       <button class="mode" data-mode="bench" role="tab" aria-selected="false">Hydraulic lock</button>
+      <button class="mode" data-mode="valves" role="tab" aria-selected="false">Valve detail</button>
+      <button class="mode" data-mode="pid" role="tab" aria-selected="false">P&amp;ID</button>
     </nav>
   </header>
 
@@ -603,6 +606,38 @@
         only about 12&nbsp;percent of full flow area and almost all the useful metering happens
         in the last part of the stroke &mdash; which is why the commanded-opening slider feels
         so unevenly weighted, and why real needle valves are trimmed the way they are.</p>
+    </div>
+
+    <div>
+      <h2>The valves themselves</h2>
+      <p>The <strong>Valve detail</strong> tab opens all three up in section, and their internals
+        move with the live state rather than being a static picture.</p>
+      <p><strong>POC-104A/B</strong> is the load-holding lock. A ball check blocks one way only,
+        so one cartridge alone would hold the load up but let the cylinder be pulled apart &mdash;
+        which is why there are two, fitted back to back. Each is opened by pressure on the other
+        side through a <em>cross pilot</em>; vent that pilot and both balls drop onto their seats
+        at once. Watch the pushrods retract and the balls seat when you hit <em>Port block</em>.</p>
+      <p><strong>NV-101</strong> is the needle. The cone lifts off its seat with commanded travel,
+        and the plot beside it is the trim characteristic &mdash; modified equal percentage, R = 50
+        &mdash; with the live operating point marked, which is where the "half travel is only
+        12&nbsp;percent of area" behaviour comes from.</p>
+      <p><strong>PSV-102</strong> is the relief. The poppet lifts against its spring once inlet
+        pressure passes the setting, and its plot shows flow against inlet pressure with the
+        cracking point and the override slope. Engage the port block and it goes
+        <em>isolated</em>, because it sits downstream of the lock.</p>
+    </div>
+
+    <div>
+      <h2>The P&amp;ID</h2>
+      <p>The <strong>P&amp;ID</strong> tab is the same circuit as an engineering sheet: tagged
+        equipment and valves, line numbers with size and spec, instrument bubbles, a valve
+        schedule, notes, legend and a title block.</p>
+      <p>It is <em>live</em>. PI-105 reads chamber pressure, ZT-107 reads piston travel, FI-108
+        reads line flow, the pipe runs animate in the direction the water is actually going, and
+        the status column of the valve schedule updates as valves open, seat and isolate. Shut
+        the port block and you can watch the whole sheet go dead downstream of POC-104A/B.</p>
+      <p>Tags are consistent across every view, so the needle you see in section as NV-101 is the
+        same one that appears on the circuit diagram and in the schedule.</p>
     </div>
 
     <div>
@@ -784,8 +819,11 @@ const S = {
 /* Four legs carry the module; the bench rig is a single cylinder. */
 function nLegs() { return S.mode === 'landing' ? 4 : 1; }
 
+/* Every view except the landing scene drives the single-cylinder bench rig. */
+function isBench() { return S.mode !== 'landing'; }
+
 function effectiveBeta(pAbs) {
-  const x0 = (S.mode === 'bench' ? P.air : 0) / 100;
+  const x0 = (isBench() ? P.air : 0) / 100;
   if (x0 <= 0) return BETA_W;
   const pa = Math.max(pAbs, 1e4);
   const r  = x0 * P_AMB / pa;                 // gas volume, relative to total at ambient
@@ -797,7 +835,7 @@ function effectiveBeta(pAbs) {
    seat, or the pilot checks when the port block is engaged - leaks a little.
    At 0 % the seal is ideal, which is the only unrealistic setting here. */
 function leakArea() {
-  return S.mode === 'bench' ? (P.leak / 100) * VALVE_FULL : 0;
+  return isBench() ? (P.leak / 100) * VALVE_FULL : 0;
 }
 
 /* Metering restriction. The landing legs meter through a fixed drilled orifice,
@@ -815,18 +853,18 @@ function meterArea() {
 }
 
 function reliefSet() {
-  return (S.mode === 'bench' ? P.relief2 : P.relief) * 1e5;
+  return (isBench() ? P.relief2 : P.relief) * 1e5;
 }
 
 function lineLen() {
-  return S.mode === 'bench' ? P.lline : L_LINE_FIXED;
+  return isBench() ? P.lline : L_LINE_FIXED;
 }
 
 /* Valve stem travel is rate limited, so shutting takes real time. That is what
    decides whether the closure makes a surge: compare it against the line's
    period 2L/c. */
 function stepValve(dt) {
-  if (S.mode !== 'bench') { S.vpos = 1; return; }
+  if (!isBench()) { S.vpos = 1; return; }
   const target = S.shut ? 0 : P.valve / 100;
   const rate = dt / Math.max(0.002, P.vclose / 1000);
   const d = target - S.vpos;
@@ -901,7 +939,7 @@ function stepChamber(dt, u) {
 /* The bench rod is bolted to the anvil, so the cylinder is a two-way strut and
    a locked chamber can hold the load down as well as up. A landing leg only
    rests its foot on the foundation, so it can never pull - it just lifts off. */
-function twoWay() { return S.mode === 'bench' && S.bolted; }
+function twoWay() { return isBench() && S.bolted; }
 
 function legForce(dt, u) {
   // Returns upward force from the whole leg set, N.
@@ -1013,7 +1051,7 @@ function reset() {
   S.vImpact = 0; S.contact = false; S.wasContact = false;
   S.jet = 0; S.flash = 0; S.cav = false;
   S.surge = 0; S.peakSurge = 0; S.peakVline = 0; S.rebound = 0;
-  S.vpos = S.mode === 'bench' ? (S.shut ? 0 : P.valve / 100) : 1;
+  S.vpos = isBench() ? (S.shut ? 0 : P.valve / 100) : 1;
   S.trace.length = 0;
   S.legF = 0; S.wireT = 0;
 
@@ -1522,7 +1560,7 @@ function drawCircuit(ctx, box, big) {
 
   if (big) {
     const names = [
-      ['METERING', S.mode === 'bench'
+      ['METERING', isBench()
         ? (S.vpos * 100).toFixed(0) + ' % · ' + (mA * 1e6).toFixed(1) + ' mm2'
         : P.orifice.toFixed(1) + ' mm fixed'],
       ['RELIEF', (reliefSet() / 1e5).toFixed(0) + ' bar'],
@@ -2011,6 +2049,687 @@ function drawBench(w, h) {
   label(ctx, 'mm', gx, gy + gh + 24, COL.dim, 8.5, 'center');
 }
 
+/* ==================================================== valve detail views */
+
+function vPanel(ctx, box, tag, title, sub, col) {
+  ctx.fillStyle = 'rgba(6,28,38,0.82)';
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  rr(ctx, box.x, box.y, box.w, box.h, 3); ctx.fill(); ctx.stroke();
+  label(ctx, tag, box.x + 12, box.y + 15, col, 11);
+  label(ctx, title, box.x + 12, box.y + 30, COL.chalk, 10);
+  label(ctx, sub, box.x + 12, box.y + 43, COL.dim, 8.5);
+  ctx.strokeStyle = COL.line;
+  ctx.beginPath();
+  ctx.moveTo(box.x + 10, box.y + 52); ctx.lineTo(box.x + box.w - 10, box.y + 52);
+  ctx.stroke();
+}
+
+/* Steel body in section. */
+function body(ctx, x, y, w, h, r) {
+  ctx.fillStyle = COL.steelD;
+  rr(ctx, x, y, w, h, r || 3); ctx.fill();
+  hatch(ctx, x, y, w, h, 5.5, COL.steel, 1, 0.7);
+  ctx.strokeStyle = COL.steel; ctx.lineWidth = 1;
+  rr(ctx, x, y, w, h, r || 3); ctx.stroke();
+}
+
+/* A coil spring drawn between two points, compressed by `squash` (0..1). */
+function spring(ctx, x0, y0, x1, y1, coils, amp, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  const dx = x1 - x0, dy = y1 - y0;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
+  ctx.moveTo(x0, y0);
+  const n = coils * 2;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    const s = (i % 2 ? 1 : -1) * (i === n ? 0 : amp);
+    ctx.lineTo(x0 + ux * len * t + nx * s, y0 + uy * len * t + ny * s);
+  }
+  ctx.stroke();
+}
+
+function flowArrows(ctx, x0, y, x1, on, col, rev) {
+  if (!on) return;
+  ctx.save();
+  ctx.fillStyle = col;
+  const d = rev ? -1 : 1;
+  for (let i = 0; i < 3; i++) {
+    let ph = (S.t * 1.8 + i / 3) % 1;
+    if (d < 0) ph = 1 - ph;
+    const px = x0 + ph * (x1 - x0);
+    ctx.beginPath();
+    ctx.moveTo(px + d * 5, y);
+    ctx.lineTo(px - d * 3, y - 3.4);
+    ctx.lineTo(px - d * 3, y + 3.4);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ---- POC-104A/B: double pilot-operated check, the load-holding lock ---- */
+
+function pocCartridge(ctx, x, y, w, h, flip, piloted, flowing, outward) {
+  ctx.save();
+  if (flip) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.translate(-x, -y); }
+
+  const my = y + h * 0.50;
+  const boreH = h * 0.20;
+  body(ctx, x, y, w, h, 3);
+
+  // through bore, cut out of the body
+  ctx.fillStyle = COL.deep;
+  ctx.fillRect(x, my - boreH / 2, w * 0.30, boreH);
+  ctx.fillRect(x + w * 0.52, my - boreH / 2, w * 0.48, boreH);
+
+  // conical seat
+  const sx = x + w * 0.44, sw = w * 0.10;
+  ctx.fillStyle = COL.deep;
+  ctx.beginPath();
+  ctx.moveTo(sx, my - boreH * 0.85);
+  ctx.lineTo(sx + sw, my - boreH * 0.22);
+  ctx.lineTo(sx + sw, my + boreH * 0.22);
+  ctx.lineTo(sx, my + boreH * 0.85);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = COL.steelL; ctx.lineWidth = 1.2; ctx.stroke();
+
+  // ball, lifted off the seat only when the pilot pushes it or free flow does
+  const lift = piloted ? w * 0.075 : 0;
+  const br = boreH * 0.46;
+  ctx.beginPath();
+  ctx.arc(sx + sw + br * 0.55 + lift, my, br, 0, Math.PI * 2);
+  ctx.fillStyle = piloted ? COL.steelL : COL.alarm;
+  ctx.fill();
+  ctx.strokeStyle = piloted ? COL.chalk : '#7d1c10'; ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // return spring behind the ball
+  spring(ctx, sx + sw + br * 1.6 + lift, my, x + w * 0.86, my, 5, boreH * 0.30,
+         piloted ? COL.mist : COL.alarm);
+
+  // pilot piston and pushrod
+  const px = x + w * 0.06, pw = w * 0.16, ph = h * 0.44;
+  ctx.fillStyle = COL.deep;
+  ctx.fillRect(px, my - ph / 2, pw, ph);
+  ctx.strokeStyle = COL.steel; ctx.strokeRect(px + 0.5, my - ph / 2 + 0.5, pw - 1, ph - 1);
+  const stroke = piloted ? w * 0.075 : 0;
+  ctx.fillStyle = COL.steelL;
+  ctx.fillRect(px + pw * 0.15 + stroke, my - ph * 0.42, pw * 0.55, ph * 0.84);
+  ctx.fillRect(px + pw * 0.70 + stroke, my - 2.2, (sx + sw * 0.4) - (px + pw * 0.70 + stroke), 4.4);
+
+  // pilot port
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = piloted ? COL.sonar : COL.dim; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(px + pw * 0.4, my + ph / 2); ctx.lineTo(px + pw * 0.4, y + h + 12);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  flowArrows(ctx, x + w * 0.66, my, x + w * 0.98, flowing, COL.sonar, !outward);
+  flowArrows(ctx, x + w * 0.02, my, x + w * 0.26, flowing, COL.sonar, !outward);
+  ctx.restore();
+}
+
+function valvePOC(ctx, box) {
+  vPanel(ctx, box, 'POC-104A / B', 'DOUBLE PILOT-OPERATED CHECK',
+         'load holding · mounted on the cylinder port', S.lock ? COL.alarm : COL.sonar);
+  const piloted = !S.lock;
+  const flowing = piloted && Math.abs(S.q) > 1e-5;
+  const outward = S.q > 0;
+  const cw = box.w * 0.86, cx = box.x + (box.w - cw) / 2;
+  const chh = Math.min(84, (box.h - 150) * 0.42);
+
+  label(ctx, 'A — BLOCKS FLOW OUT OF CYLINDER', box.x + 12, box.y + 68, COL.dim, 8.5);
+  pocCartridge(ctx, cx, box.y + 78, cw, chh, false, piloted, flowing, outward);
+
+  const y2 = box.y + 78 + chh + 54;
+  label(ctx, 'B — BLOCKS FLOW INTO CYLINDER', box.x + 12, y2 - 10, COL.dim, 8.5);
+  pocCartridge(ctx, cx, y2, cw, chh, true, piloted, flowing, outward);
+
+  // cross-pilot: each cartridge is opened by pressure on the other side
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = piloted ? COL.sonar : COL.dim; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(cx + cw * 0.11, box.y + 78 + chh + 12);
+  ctx.lineTo(cx + cw * 0.11, y2 - 26);
+  ctx.lineTo(cx + cw * 0.89, y2 - 26);
+  ctx.lineTo(cx + cw * 0.89, y2 + chh + 12);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  label(ctx, 'CROSS PILOT', cx + cw * 0.5, y2 - 26, piloted ? COL.sonar : COL.dim,
+        8.5, 'center', COL.deep);
+
+  const sy = y2 + chh + 30;
+  label(ctx, piloted ? 'PILOT PRESSURISED' : 'PILOT VENTED',
+        box.x + 12, sy, piloted ? COL.sonar : COL.alarm, 10);
+  label(ctx, piloted ? 'pushrods hold both balls clear — free both ways'
+                     : 'both balls on seat — nothing passes either way',
+        box.x + 12, sy + 14, COL.mist, 9);
+  label(ctx, 'leak past seat  ' + (leakArea() * 1e6).toFixed(3) + ' mm2',
+        box.x + 12, sy + 28, COL.dim, 9);
+
+  const hy = sy + 54;
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(box.x + 10, hy - 16); ctx.lineTo(box.x + box.w - 10, hy - 16);
+  ctx.stroke();
+  label(ctx, 'WHY TWO OF THEM', box.x + 12, hy, COL.safety, 8.5);
+  const notes = [
+    'A ball check blocks one way only. One cartridge alone',
+    'would hold the load up but let the cylinder be pulled',
+    'apart, so they are fitted back to back.',
+    '',
+    'Each is opened by pressure on the other side — that is',
+    'the cross pilot. Vent it and both balls drop on seat.',
+    '',
+    'Mounted on the cylinder port, ahead of the metering',
+    'valve and relief, so a burst line cannot drop the load.'
+  ];
+  notes.forEach(function (t, i) {
+    label(ctx, t, box.x + 12, hy + 16 + i * 12, COL.mist, 8.5);
+  });
+}
+
+/* ---- NV-101: needle metering valve ------------------------------------ */
+
+function valveNeedle(ctx, box) {
+  const mA = meterArea();
+  vPanel(ctx, box, 'NV-101', 'NEEDLE METERING VALVE',
+         'equal percentage · R = 50 · ' + (VALVE_FULL * 1e6).toFixed(0) + ' mm2 full open',
+         S.vpos > 0.005 ? COL.sonar : COL.dim);
+
+  const cx = box.x + box.w * 0.46;
+  const top = box.y + 96;
+  const bw = box.w * 0.46, bh = Math.min(200, box.h * 0.40);
+  body(ctx, cx - bw / 2, top, bw, bh, 3);
+
+  // inlet gallery and outlet bore
+  const gy = top + bh * 0.40;
+  ctx.fillStyle = COL.deep;
+  ctx.fillRect(cx - bw / 2, gy - bh * 0.10, bw * 0.34, bh * 0.20);
+  ctx.fillRect(cx - bw * 0.16, gy - bh * 0.10, bw * 0.32, bh * 0.22);
+  const seatY = gy + bh * 0.12;
+  const seatR = bw * 0.10;
+  ctx.beginPath();                                   // conical seat down to outlet
+  ctx.moveTo(cx - bw * 0.16, seatY);
+  ctx.lineTo(cx - seatR, seatY + bh * 0.13);
+  ctx.lineTo(cx - seatR, top + bh);
+  ctx.lineTo(cx + seatR, top + bh);
+  ctx.lineTo(cx + seatR, seatY + bh * 0.13);
+  ctx.lineTo(cx + bw * 0.16, seatY);
+  ctx.closePath();
+  ctx.fillStyle = COL.deep; ctx.fill();
+  ctx.strokeStyle = COL.steelL; ctx.lineWidth = 1.2; ctx.stroke();
+
+  // needle: cone on a stem, lifted by the commanded travel
+  const maxLift = bh * 0.20;
+  const lift = maxLift * S.vpos;
+  const tipY = seatY + bh * 0.14 - lift;
+  ctx.beginPath();
+  ctx.moveTo(cx - bw * 0.11, tipY - bh * 0.20);
+  ctx.lineTo(cx + bw * 0.11, tipY - bh * 0.20);
+  ctx.lineTo(cx, tipY);
+  ctx.closePath();
+  ctx.fillStyle = '#8aa7b4'; ctx.fill();
+  ctx.strokeStyle = '#5c7d8c'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#8aa7b4';
+  ctx.fillRect(cx - bw * 0.045, top - 26, bw * 0.09, (tipY - bh * 0.20) - (top - 26));
+
+  // packing gland at the stem exit
+  ctx.fillStyle = '#02090d';
+  ctx.fillRect(cx - bw * 0.075, top + 3, bw * 0.03, bh * 0.07);
+  ctx.fillRect(cx + bw * 0.045, top + 3, bw * 0.03, bh * 0.07);
+
+  // manual actuator
+  ctx.strokeStyle = COL.steelL; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 18, top - 26); ctx.lineTo(cx + 18, top - 26);
+  ctx.stroke();
+
+  leader(ctx, cx, tipY - bh * 0.10, box.x + box.w * 0.20, top + bh * 0.16,
+         'NEEDLE', COL.dim, true, 8.5);
+  leader(ctx, cx + seatR, seatY + bh * 0.06, box.x + box.w * 0.90, seatY + bh * 0.02,
+         'SEAT', COL.dim, false, 8.5);
+  leader(ctx, cx - bw * 0.40, gy, box.x + box.w * 0.20, gy + bh * 0.20,
+         'INLET', COL.ice, true, 8.5);
+  label(ctx, 'OUTLET', cx, top + bh + 12, COL.ice, 8.5, 'center');
+
+  flowArrows(ctx, cx - bw * 0.52, gy, cx - bw * 0.20,
+             Math.abs(S.q) > 1e-5 && !S.lock, COL.sonar, S.q < 0);
+
+  /* --- characteristic: area against travel, with the operating point --- */
+  const px = box.x + 16, pw = box.w - 32;
+  const py = top + bh + 46, phh = Math.min(96, box.h - (bh + 230));
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, pw, phh);
+  label(ctx, 'FLOW AREA vs STEM TRAVEL', px, py - 9, COL.dim, 8.5);
+  ctx.beginPath();
+  for (let i = 0; i <= 40; i++) {
+    const t = i / 40;
+    const a = (Math.pow(VALVE_R, t) - 1) / (VALVE_R - 1);
+    const xx = px + t * pw, yy = py + phh - a * (phh - 4);
+    if (!i) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+  }
+  ctx.strokeStyle = COL.sonar; ctx.lineWidth = 1.6; ctx.stroke();
+  const opA = (Math.pow(VALVE_R, S.vpos) - 1) / (VALVE_R - 1);
+  const opx = px + S.vpos * pw, opy = py + phh - opA * (phh - 4);
+  ctx.setLineDash([2, 3]); ctx.strokeStyle = COL.safety; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px, opy); ctx.lineTo(opx, opy); ctx.lineTo(opx, py + phh);
+  ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = COL.safety;
+  ctx.beginPath(); ctx.arc(opx, opy, 3.4, 0, Math.PI * 2); ctx.fill();
+  label(ctx, '0', px, py + phh + 9, COL.dim, 8);
+  label(ctx, 'FULL', px + pw, py + phh + 9, COL.dim, 8, 'right');
+  label(ctx, 'half travel is only ' +
+        (100 * (Math.pow(VALVE_R, 0.5) - 1) / (VALVE_R - 1)).toFixed(0) + ' % of area',
+        px, py + phh + 22, COL.mist, 8.5);
+
+  const sy = py + phh + 40;
+  label(ctx, 'TRAVEL ' + (S.vpos * 100).toFixed(0) + ' %   AREA ' +
+        (mA * 1e6).toFixed(2) + ' mm2', box.x + 12, sy,
+        S.vpos > 0.005 ? COL.chalk : COL.alarm, 9.5);
+  const dpv = 0.5 * RHO * S.q * Math.abs(S.q) / (CD * CD * Math.max(mA, 1e-10) * Math.max(mA, 1e-10));
+  label(ctx, 'dP ACROSS TRIM ' + (Math.abs(dpv) / 1e5).toFixed(1) + ' bar',
+        box.x + 12, sy + 14, COL.mist, 9);
+  label(ctx, S.vpos < 0.005 ? 'on seat — leaking past only' : 'metering',
+        box.x + 12, sy + 28, S.vpos < 0.005 ? COL.alarm : COL.sonar, 9);
+}
+
+/* ---- PSV-102: relief valve -------------------------------------------- */
+
+function valveRelief(ctx, box) {
+  const pset = reliefSet();
+  const open = !S.lock && S.p > pset;
+  vPanel(ctx, box, 'PSV-102', 'DIRECT-ACTING RELIEF VALVE',
+         'spring loaded · set ' + (pset / 1e5).toFixed(0) + ' bar · field adjustable',
+         open ? COL.alarm : COL.dim);
+
+  const cx = box.x + box.w * 0.46;
+  const top = box.y + 96;
+  const bw = box.w * 0.46, bh = Math.min(200, box.h * 0.40);
+  body(ctx, cx - bw / 2, top, bw, bh, 3);
+
+  // inlet from below, seat, poppet
+  const seatY = top + bh * 0.74;
+  const seatR = bw * 0.11;
+  ctx.fillStyle = COL.deep;
+  ctx.fillRect(cx - seatR, seatY, seatR * 2, top + bh - seatY);
+  const overP = Math.max(0, (S.p - pset) / (60e5));
+  const lift = open ? Math.min(bh * 0.09, bh * 0.02 + bh * 0.07 * Math.min(1, overP)) : 0;
+
+  ctx.fillStyle = COL.deep;                          // spring chamber
+  ctx.fillRect(cx - bw * 0.20, top + bh * 0.10, bw * 0.40, bh * 0.52);
+
+  ctx.beginPath();                                   // poppet
+  ctx.moveTo(cx - bw * 0.19, seatY - bh * 0.16 - lift);
+  ctx.lineTo(cx + bw * 0.19, seatY - bh * 0.16 - lift);
+  ctx.lineTo(cx + seatR * 0.9, seatY - lift);
+  ctx.lineTo(cx - seatR * 0.9, seatY - lift);
+  ctx.closePath();
+  ctx.fillStyle = open ? COL.alarm : COL.steelL; ctx.fill();
+  ctx.strokeStyle = open ? '#7d1c10' : '#5c7d8c'; ctx.lineWidth = 1; ctx.stroke();
+
+  spring(ctx, cx, seatY - bh * 0.17 - lift, cx, top + bh * 0.14, 6, bw * 0.15,
+         open ? COL.alarm : COL.mist);
+
+  ctx.fillStyle = COL.steelL;                        // adjusting screw + locknut
+  ctx.fillRect(cx - bw * 0.07, top - 20, bw * 0.14, bh * 0.16 + 20);
+  ctx.fillRect(cx - bw * 0.13, top - 12, bw * 0.26, 7);
+
+  // discharge to sea, out of the side
+  ctx.fillStyle = COL.deep;
+  ctx.fillRect(cx + seatR, seatY - bh * 0.20, bw / 2 - seatR, bh * 0.13);
+  flowArrows(ctx, cx + seatR, seatY - bh * 0.135, cx + bw * 0.62, open, COL.alarm, false);
+  flowArrows(ctx, cx, top + bh + 4, cx, top + bh + 4, false, COL.alarm, false);
+
+  leader(ctx, cx, top + bh * 0.34, box.x + box.w * 0.20, top + bh * 0.20,
+         'SET SPRING', COL.dim, true, 8.5);
+  leader(ctx, cx - seatR, seatY - lift * 0.5, box.x + box.w * 0.20, seatY - bh * 0.02,
+         'POPPET + SEAT', COL.dim, true, 8.5);
+  leader(ctx, cx, top - 14, box.x + box.w * 0.20, top - 14,
+         'ADJUSTER', COL.dim, true, 8.5);
+  label(ctx, 'INLET', cx, top + bh + 12, COL.ice, 8.5, 'center');
+  label(ctx, 'TO SEA', cx + bw * 0.66, seatY - bh * 0.135, COL.dim, 8.5);
+
+  /* --- characteristic: flow against inlet pressure --- */
+  const px = box.x + 16, pw = box.w - 32;
+  const py = top + bh + 46, phh = Math.min(96, box.h - (bh + 230));
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, pw, phh);
+  label(ctx, 'RELIEF FLOW vs INLET PRESSURE', px, py - 9, COL.dim, 8.5);
+  const pMax = pset * 1.6;
+  const qMax = CD * A_RELIEF * Math.sqrt(2 * (pMax - pset) / RHO) || 1;
+  ctx.beginPath();
+  for (let i = 0; i <= 40; i++) {
+    const pp = (i / 40) * pMax;
+    const qq = pp > pset ? CD * A_RELIEF * Math.sqrt(2 * (pp - pset) / RHO) : 0;
+    const xx = px + (pp / pMax) * pw, yy = py + phh - (qq / qMax) * (phh - 4);
+    if (!i) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+  }
+  ctx.strokeStyle = COL.alarm; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.setLineDash([2, 3]); ctx.strokeStyle = COL.dim; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px + (pset / pMax) * pw, py); ctx.lineTo(px + (pset / pMax) * pw, py + phh);
+  ctx.stroke(); ctx.setLineDash([]);
+  label(ctx, 'SET', px + (pset / pMax) * pw + 4, py + 9, COL.dim, 8);
+  const opx = px + Math.min(1, Math.max(0, S.p / pMax)) * pw;
+  const opq = S.p > pset ? CD * A_RELIEF * Math.sqrt(2 * (S.p - pset) / RHO) : 0;
+  ctx.fillStyle = COL.safety;
+  ctx.beginPath();
+  ctx.arc(opx, py + phh - (opq / qMax) * (phh - 4), 3.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  const sy = py + phh + 40;
+  label(ctx, 'INLET ' + (S.p / 1e5).toFixed(0) + ' bar   SET ' + (pset / 1e5).toFixed(0) + ' bar',
+        box.x + 12, sy, COL.chalk, 9.5);
+  label(ctx, 'LIFT ' + (open ? (1.2 * Math.min(1, overP) + 0.3).toFixed(2) : '0.00') + ' mm',
+        box.x + 12, sy + 14, COL.mist, 9);
+  label(ctx, S.lock ? 'isolated by POC-104' : (open ? 'RELIEVING' : 'shut'),
+        box.x + 12, sy + 28, S.lock ? COL.dim : (open ? COL.alarm : COL.sonar), 9);
+}
+
+function drawValves(w, h) {
+  const ctx = sctx;
+  drawWater(ctx, 0, 0, w, h, '#0a2c3c');
+  const narrow = w < 900;
+  const pad = 10;
+  const cols = narrow ? 1 : 3;
+  const pw = (w - pad * (cols + 1)) / cols;
+  const boxes = [];
+  for (let i = 0; i < 3; i++) {
+    boxes.push({ x: pad + (pad + pw) * (i % cols), y: pad + (h - 2 * pad) * Math.floor(i / cols),
+                 w: pw, h: h - 2 * pad });
+  }
+  if (narrow) {
+    valvePOC(ctx, boxes[0]);
+    label(ctx, 'NV-101 and PSV-102 need a wider screen', pad + 12, h - 22, COL.dim, 8.5);
+    return;
+  }
+  valvePOC(ctx, boxes[0]);
+  valveNeedle(ctx, boxes[1]);
+  valveRelief(ctx, boxes[2]);
+}
+
+/* ========================================================== P&ID sheet   */
+
+function pidBubble(ctx, x, y, r, l1, l2, remote, live) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = COL.deep; ctx.fill();
+  ctx.strokeStyle = live ? COL.sonar : COL.mist; ctx.lineWidth = 1.2; ctx.stroke();
+  if (remote) {                        // solid bar = accessible to the operator
+    ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x + r, y); ctx.stroke();
+  }
+  label(ctx, l1, x, y - (remote ? r * 0.48 : 5), live ? COL.sonar : COL.chalk, 8.5, 'center');
+  label(ctx, l2, x, y + (remote ? r * 0.48 : 5), COL.mist, 8.5, 'center');
+}
+
+/* Bowtie body with an actuator stem: the generic in-line valve. */
+function pidValve(ctx, x, y, s, kind, open, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x - s, y - s * 0.62); ctx.lineTo(x - s, y + s * 0.62);
+  ctx.lineTo(x + s, y - s * 0.62); ctx.lineTo(x + s, y + s * 0.62);
+  ctx.closePath();
+  if (open) ctx.stroke(); else ctx.fill();
+
+  if (kind === 'needle') {            // manual handwheel + needle trim marker
+    ctx.beginPath();
+    ctx.moveTo(x, y - s * 0.62); ctx.lineTo(x, y - s * 1.5);
+    ctx.moveTo(x - s * 0.55, y - s * 1.5); ctx.lineTo(x + s * 0.55, y - s * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.28, y - s * 1.5);
+    ctx.lineTo(x + s * 0.28, y - s * 1.5);
+    ctx.lineTo(x, y - s * 0.9);
+    ctx.closePath(); ctx.fill();
+  } else if (kind === 'relief') {     // angled body with an external spring
+    ctx.beginPath();
+    ctx.moveTo(x, y - s * 0.62); ctx.lineTo(x, y - s * 1.2);
+    ctx.stroke();
+    spring(ctx, x, y - s * 1.2, x, y - s * 2.0, 4, s * 0.35, col);
+  }
+}
+
+function pidCheck(ctx, x, y, s, open, col, down) {
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.fillStyle = col;
+  ctx.beginPath();                    // seat bar
+  if (down) { ctx.moveTo(x - s * 0.8, y + s * 0.55); ctx.lineTo(x + s * 0.8, y + s * 0.55); }
+  else { ctx.moveTo(x - s * 0.8, y - s * 0.55); ctx.lineTo(x + s * 0.8, y - s * 0.55); }
+  ctx.stroke();
+  ctx.beginPath();                    // ball
+  ctx.arc(x, y + (down ? -s * 0.1 : s * 0.1) + (open ? (down ? -s * 0.5 : s * 0.5) : 0),
+          s * 0.42, 0, Math.PI * 2);
+  if (open) ctx.stroke(); else ctx.fill();
+}
+
+function drawPID(w, h) {
+  const ctx = sctx;
+  ctx.fillStyle = COL.abyss;
+  ctx.fillRect(0, 0, w, h);
+
+  /* --- sheet border --- */
+  ctx.strokeStyle = COL.lineHi; ctx.lineWidth = 1.5;
+  ctx.strokeRect(8.5, 8.5, w - 17, h - 17);
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.strokeRect(14.5, 14.5, w - 29, h - 29);
+
+  const narrow = w < 760;
+  const flowing = !S.lock && Math.abs(S.q) > 1e-5;
+  const outward = S.q > 0;
+  const mA = meterArea();
+  const meterOpen = !S.lock && mA > leakArea() * 1.5;
+  const reliefOpen = !S.lock && S.p > reliefSet();
+  const checkOpen = !S.lock && S.p < -2e4;
+  const on = function (v) { return v ? COL.sonar : COL.mist; };
+
+  function pipe(ax, ay, bx, by, live, rev, lbl) {
+    ctx.strokeStyle = live ? COL.sonar : COL.mist;
+    ctx.lineWidth = live ? 2 : 1.4;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    if (live) {
+      const len = Math.hypot(bx - ax, by - ay);
+      const ux = (bx - ax) / len, uy = (by - ay) / len, d = rev ? -1 : 1;
+      ctx.fillStyle = COL.sonar;
+      for (let i = 0; i < Math.max(1, Math.round(len / 40)); i++) {
+        let ph = (S.t * 1.5 + i / Math.max(1, Math.round(len / 40))) % 1;
+        if (d < 0) ph = 1 - ph;
+        const px = ax + ux * ph * len, py = ay + uy * ph * len;
+        ctx.beginPath();
+        ctx.moveTo(px + d * ux * 5, py + d * uy * 5);
+        ctx.lineTo(px - d * ux * 3 - uy * 3.4, py - d * uy * 3 + ux * 3.4);
+        ctx.lineTo(px - d * ux * 3 + uy * 3.4, py - d * uy * 3 - ux * 3.4);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    if (lbl && !narrow) {
+      label(ctx, lbl, (ax + bx) / 2, (ay + by) / 2 - 9, COL.dim, 8, 'center', COL.abyss);
+    }
+  }
+
+  /* --- equipment: the damper cylinder --------------------------------- */
+  const cyX = 60, cyY = h * 0.26, cyW = Math.min(120, w * 0.13), cyH = h * 0.26;
+  ctx.strokeStyle = COL.mist; ctx.lineWidth = 1.4;
+  ctx.strokeRect(cyX, cyY, cyW, cyH);
+  const frac = Math.min(1, S.x / STROKE);
+  const pistY = cyY + cyH * (0.12 + 0.62 * (1 - frac));
+  ctx.beginPath();                                  // piston and rod
+  ctx.moveTo(cyX, pistY); ctx.lineTo(cyX + cyW, pistY);
+  ctx.moveTo(cyX + cyW / 2, pistY); ctx.lineTo(cyX + cyW / 2, cyY + cyH + 26);
+  ctx.stroke();
+  ctx.fillStyle = COL.mist;
+  ctx.fillRect(cyX + cyW * 0.30, cyY + cyH + 22, cyW * 0.40, 5);
+  label(ctx, 'DMP-101', cyX, cyY - 22, COL.chalk, 9.5);
+  label(ctx, 'SOFT-LANDING CYLINDER', cyX, cyY - 10, COL.dim, 8.5);
+  label(ctx, '180/90 x 600', cyX - 6, cyY + cyH + 16, COL.dim, 8.5);
+  label(ctx, 'CAP', cyX + 6, cyY + 12, COL.ice, 8);
+  label(ctx, 'HEAD', cyX + 6, cyY + cyH - 12, COL.dim, 8);
+
+  // head end vented to sea
+  pipe(cyX + cyW, cyY + cyH - 14, cyX + cyW + 34, cyY + cyH - 14, false, false, null);
+  ctx.strokeStyle = COL.mist; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(cyX + cyW + 34, cyY + cyH - 22); ctx.lineTo(cyX + cyW + 44, cyY + cyH - 14);
+  ctx.lineTo(cyX + cyW + 34, cyY + cyH - 6);
+  ctx.stroke();
+  label(ctx, 'VENT', cyX + cyW + 48, cyY + cyH - 14, COL.dim, 8);
+
+  /* --- line 101: cap port to the port block --------------------------- */
+  const portY = cyY + 20;
+  const pocX = cyX + cyW + (narrow ? 70 : 120);
+  pipe(cyX + cyW, portY, pocX - 26, portY, flowing, !outward,
+       '50-HW-101-A1');
+
+  /* --- POC-104A/B ------------------------------------------------------ */
+  const s = 11;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = S.lock ? COL.alarm : COL.dim; ctx.lineWidth = 1;
+  ctx.strokeRect(pocX - 26, portY - 30, 52, 60);
+  ctx.setLineDash([]);
+  pidCheck(ctx, pocX - 11, portY, s, !S.lock, S.lock ? COL.alarm : COL.sonar, false);
+  pidCheck(ctx, pocX + 11, portY, s, !S.lock, S.lock ? COL.alarm : COL.sonar, true);
+  label(ctx, 'POC-104A/B', pocX, portY - 40, S.lock ? COL.alarm : COL.chalk, 9, 'center');
+  label(ctx, S.lock ? 'LOCKED' : 'PILOTED OPEN', pocX, portY + 42,
+        S.lock ? COL.alarm : COL.sonar, 8.5, 'center');
+
+  /* --- manifold rail and the three parallel branches ------------------- */
+  const railX0 = pocX + 26;
+  const bx = narrow ? [w * 0.62, w * 0.75, w * 0.88] : [w * 0.52, w * 0.66, w * 0.80];
+  const railY = portY;
+  const symY = h * 0.52;
+  const retY = h * 0.70;
+  pipe(railX0, railY, bx[2], railY, flowing && !S.lock, !outward, '50-HW-102-A1');
+
+  const live = [meterOpen && Math.abs(S.q) > 1e-5, reliefOpen, checkOpen];
+  const kinds = ['needle', 'relief', 'check'];
+  const tags = [['NV-101', (S.vpos * 100).toFixed(0) + ' % OPEN'],
+                ['PSV-102', 'SET ' + (reliefSet() / 1e5).toFixed(0) + ' bar'],
+                ['CV-103', 'REFILL']];
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = live[i] ? COL.sonar : COL.mist;
+    ctx.beginPath(); ctx.arc(bx[i], railY, 3, 0, Math.PI * 2); ctx.fill();
+    pipe(bx[i], railY, bx[i], symY - 18, live[i], i === 2, null);
+    if (kinds[i] === 'check') {
+      pidCheck(ctx, bx[i], symY, s, live[i], live[i] ? COL.sonar : COL.mist, false);
+    } else {
+      pidValve(ctx, bx[i], symY, s, kinds[i], !live[i],
+               live[i] ? (i === 1 ? COL.alarm : COL.sonar) : COL.mist);
+    }
+    pipe(bx[i], symY + 18, bx[i], retY, live[i], i === 2, null);
+    ctx.fillStyle = live[i] ? COL.sonar : COL.mist;
+    ctx.beginPath(); ctx.arc(bx[i], retY, 3, 0, Math.PI * 2); ctx.fill();
+    label(ctx, tags[i][0], bx[i] + 18, symY - 4, COL.chalk, 8.5);
+    label(ctx, tags[i][1], bx[i] + 18, symY + 7, COL.mist, 8);
+  }
+  pipe(bx[0], retY, bx[2], retY, flowing && !S.lock, !outward, '50-HW-103-A1');
+
+  /* --- discharge to sea ------------------------------------------------ */
+  const seaX = bx[0] - 60;
+  pipe(bx[0], retY, seaX, retY, flowing && !S.lock, !outward, null);
+  ctx.strokeStyle = flowing ? COL.ice : COL.mist; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(seaX, retY - 9); ctx.lineTo(seaX - 12, retY); ctx.lineTo(seaX, retY + 9);
+  ctx.stroke();
+  label(ctx, 'TO SEA', seaX - 18, retY - 12, COL.dim, 8.5, 'right');
+  label(ctx, (P_AMB / 1e5).toFixed(0) + ' bar', seaX - 18, retY + 1, COL.dim, 8.5, 'right');
+
+  /* --- instruments ----------------------------------------------------- */
+  const ir = 15;
+  const piX = (cyX + cyW + pocX - 26) / 2;
+  ctx.strokeStyle = COL.mist; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(piX, portY); ctx.lineTo(piX, portY - 34); ctx.stroke();
+  pidBubble(ctx, piX, portY - 34 - ir, ir, 'PI', '105', false, true);
+  label(ctx, (S.p / 1e5).toFixed(0) + ' bar', piX + ir + 5, portY - 34 - ir, COL.sonar, 9);
+
+  const ztX = cyX + cyW / 2;
+  ctx.beginPath(); ctx.moveTo(ztX, cyY + cyH + 30); ctx.lineTo(ztX, cyY + cyH + 58); ctx.stroke();
+  pidBubble(ctx, ztX, cyY + cyH + 58 + ir, ir, 'ZT', '107', true, true);
+  label(ctx, (S.x * 1000).toFixed(1) + ' mm', ztX + ir + 5, cyY + cyH + 58 + ir, COL.sonar, 9);
+
+  const fiX = bx[2] - 40;
+  ctx.beginPath(); ctx.moveTo(fiX, retY); ctx.lineTo(fiX, retY + 30); ctx.stroke();
+  pidBubble(ctx, fiX, retY + 30 + ir, ir, 'FI', '108', false, true);
+  label(ctx, (S.q * 1000).toFixed(2) + ' L/s', fiX + ir + 5, retY + 30 + ir, COL.sonar, 9);
+
+  /* --- notes, legend and title block ----------------------------------- */
+  if (narrow) return;
+  const tbW = 300, tbH = 78;
+  const tbX = w - 15 - tbW, tbY = h - 15 - tbH;
+  ctx.strokeStyle = COL.lineHi; ctx.lineWidth = 1;
+  ctx.strokeRect(tbX + 0.5, tbY + 0.5, tbW, tbH);
+  ctx.beginPath();
+  ctx.moveTo(tbX, tbY + 30); ctx.lineTo(tbX + tbW, tbY + 30);
+  ctx.moveTo(tbX, tbY + 54); ctx.lineTo(tbX + tbW, tbY + 54);
+  ctx.moveTo(tbX + tbW * 0.62, tbY + 54); ctx.lineTo(tbX + tbW * 0.62, tbY + tbH);
+  ctx.stroke();
+  label(ctx, 'SUBSEA SOFT-LANDING DAMPER', tbX + 8, tbY + 12, COL.chalk, 9.5);
+  label(ctx, 'HYDRAULIC SCHEMATIC / P&ID', tbX + 8, tbY + 23, COL.safety, 9);
+  label(ctx, 'DWG No.  SLD-2001', tbX + 8, tbY + 42, COL.mist, 8.5);
+  label(ctx, 'REV  B', tbX + tbW - 8, tbY + 42, COL.mist, 8.5, 'right');
+  label(ctx, 'SCALE  NTS', tbX + 8, tbY + 66, COL.dim, 8.5);
+  label(ctx, 'SHEET 1 OF 1', tbX + tbW * 0.64, tbY + 66, COL.dim, 8.5);
+
+  const nX = 26, nY = h - 15 - 118;
+  label(ctx, 'NOTES', nX, nY, COL.safety, 8.5);
+  const notes = [
+    '1. ALL LINES 50 NB UNLESS NOTED.',
+    '2. POC-104A/B MOUNTED DIRECTLY ON CYLINDER CAP PORT.',
+    '3. FLUID: FILTERED SEAWATER. AMBIENT ' + (P_AMB / 1e5).toFixed(0) + ' bar AT ' + DEPTH + ' m.',
+    '4. PSV-102 FIELD ADJUSTABLE 40-400 bar.',
+    '5. CYLINDER HEAD END VENTED TO SEA.',
+    '6. NV-101 TRIM: EQUAL PERCENTAGE, R = 50.'
+  ];
+  notes.forEach(function (t, i) {
+    label(ctx, t, nX, nY + 15 + i * 13, COL.mist, 8.5);
+  });
+
+  const lgX = w * 0.46, lgY = h - 15 - 118;
+  label(ctx, 'LEGEND', lgX, lgY, COL.safety, 8.5);
+  const items = [
+    ['needle', 'NEEDLE / METERING VALVE'],
+    ['relief', 'PRESSURE RELIEF VALVE'],
+    ['check', 'CHECK VALVE'],
+    ['bubble', 'FIELD INSTRUMENT — LIVE VALUE']
+  ];
+  items.forEach(function (it, i) {
+    const yy = lgY + 20 + i * 23;
+    if (it[0] === 'check') pidCheck(ctx, lgX + 10, yy, 7, false, COL.mist, false);
+    else if (it[0] === 'bubble') pidBubble(ctx, lgX + 10, yy, 8, '', '', false, false);
+    else pidValve(ctx, lgX + 10, yy, 7, it[0], false, COL.mist);
+    label(ctx, it[1], lgX + 26, yy, COL.mist, 8.5);
+  });
+
+  /* --- valve schedule, top right --------------------------------------- */
+  const vsX = w * 0.58, vsY = 58, vsW = w - 15 - vsX;
+  label(ctx, 'VALVE SCHEDULE', vsX, vsY - 8, COL.safety, 8.5);
+  const colX = [0, vsW * 0.22, vsW * 0.50, vsW * 0.74];
+  const rows2 = [
+    ['TAG', 'SERVICE', 'SIZE / SET', 'STATUS'],
+    ['POC-104A/B', 'LOAD HOLD', '2 x PILOT CK', S.lock ? 'SHUT' : 'OPEN'],
+    ['NV-101', 'METERING', (mA * 1e6).toFixed(1) + ' mm2', meterOpen ? 'PASSING' : 'ON SEAT'],
+    ['PSV-102', 'OVERPRESS', (reliefSet() / 1e5).toFixed(0) + ' bar',
+     S.lock ? 'ISOLATED' : (reliefOpen ? 'RELIEVING' : 'SHUT')],
+    ['CV-103', 'REFILL', '50 NB', S.lock ? 'ISOLATED' : (checkOpen ? 'PASSING' : 'SEATED')]
+  ];
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.strokeRect(vsX + 0.5, vsY + 0.5, vsW, 16 * rows2.length);
+  rows2.forEach(function (r, i) {
+    const yy = vsY + 16 * i + 8;
+    if (i) {
+      ctx.beginPath();
+      ctx.moveTo(vsX, vsY + 16 * i); ctx.lineTo(vsX + vsW, vsY + 16 * i);
+      ctx.stroke();
+    }
+    const stateCol = r[3] === 'SHUT' || r[3] === 'ON SEAT' || r[3] === 'ISOLATED'
+      ? COL.alarm : (r[3] === 'STATUS' ? COL.dim : COL.sonar);
+    for (let c = 0; c < 4; c++) {
+      label(ctx, r[c], vsX + 7 + colX[c], yy,
+            i === 0 ? COL.dim : (c === 3 ? stateCol : COL.mist), 8);
+    }
+  });
+}
+
 /* ---------------------------------------------------------- trace charts */
 
 function drawTraces() {
@@ -2104,7 +2823,7 @@ const READOUTS = {
 function buildReadouts() {
   const host = document.getElementById('readouts');
   host.innerHTML = '';
-  for (const r of READOUTS[S.mode]) {
+  for (const r of (READOUTS[S.mode] || READOUTS.bench)) {
     const d = document.createElement('div');
     d.className = 'ro' + (r.wide ? ' wide' : '');
     d.innerHTML = '<span class="ro-k">' + r.k + '</span>' +
@@ -2219,10 +2938,10 @@ function updateReadouts() {
   // banner
   const b = document.getElementById('banner');
   let msg = '';
-  if (S.mode === 'bench' && S.lock) {
+  if (isBench() && S.lock) {
     msg = S.bolted ? 'Port block shut — locked in both directions'
                    : 'Port block shut — holds in compression only, rod is free';
-  } else if (S.mode === 'bench' && S.vpos < 0.005) {
+  } else if (isBench() && S.vpos < 0.005) {
     msg = P.leak > 0 ? 'Metering valve on its seat — leaking past at ' +
                        (P.leak).toFixed(2) + ' %'
                      : 'Metering valve shut — refill check still open';
@@ -2235,12 +2954,16 @@ function updateReadouts() {
   b.classList.toggle('on', !!msg);
 
   const narrow = scene.clientWidth < 620;
-  document.getElementById('stageTag').textContent =
-    S.mode === 'landing'
-      ? (narrow ? 'Side elevation · ' + DEPTH + ' m depth'
-                : 'Side elevation · ' + DEPTH + ' m water depth · leg detail enlarged')
-      : (narrow ? 'Drop-test bench · section'
-                : 'Drop-test bench · cylinder shown in section, enlarged');
+  const tags = {
+    landing: narrow ? 'Side elevation · ' + DEPTH + ' m depth'
+                    : 'Side elevation · ' + DEPTH + ' m water depth · leg detail enlarged',
+    bench:   narrow ? 'Drop-test bench · section'
+                    : 'Drop-test bench · cylinder shown in section, enlarged',
+    valves:  narrow ? 'Valve sections · scroll the rail for state'
+                    : 'Valve sections · internals move with the live state',
+    pid:     'Piping and instrumentation · instrument bubbles read live values'
+  };
+  document.getElementById('stageTag').textContent = tags[S.mode] || tags.bench;
 }
 
 /* =====================================================================
@@ -2257,7 +2980,7 @@ function buildControls() {
   const host = document.getElementById('controls');
   host.innerHTML = '';
   let seen = null;
-  for (const c of CONTROLS[S.mode]) {
+  for (const c of (CONTROLS[S.mode] || CONTROLS.bench)) {
     if (c.group && c.group !== seen) {
       seen = c.group;
       const h = document.createElement('div');
@@ -2347,7 +3070,7 @@ function setMode(m) {
   S.shut = false;
   S.bolted = true;
   S.rigid = false;
-  if (m === 'bench' && S.speed === 1) S.speed = 0.25;
+  if (m !== 'landing' && S.speed === 1) S.speed = 0.25;
   document.querySelectorAll('.mode').forEach(function (b) {
     const on = b.dataset.mode === m;
     b.classList.toggle('is-on', on);
@@ -2379,7 +3102,10 @@ function frame(now) {
 
   const { w, h } = fitCanvas(scene, sctx);
   sctx.clearRect(0, 0, w, h);
-  if (S.mode === 'landing') drawLanding(w, h); else drawBench(w, h);
+  if (S.mode === 'landing') drawLanding(w, h);
+  else if (S.mode === 'valves') drawValves(w, h);
+  else if (S.mode === 'pid') drawPID(w, h);
+  else drawBench(w, h);
   drawTraces();
   updateReadouts();
 
