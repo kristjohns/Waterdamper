@@ -31,18 +31,57 @@ down the remaining stroke at ~0.05 m/s.
 
 ### 2. Hydraulic lock
 
-The same cylinder on a drop-test bench. Close the metering valve, or hit **Block ports** to
-shut the pilot-operated check valve as well, and the water has nowhere to go.
+The same cylinder on a drop-test bench, with two different ways to stop the flow.
 
-The damper stops being a damper and becomes a spring made of water: piston travel collapses
-from hundreds of millimetres to a few, chamber pressure spikes to a few hundred bar, and the
-load *bounces* — a locked chamber stores energy elastically and hands it straight back,
-where an orifice turns it into heat. The energy-budget bar splits dissipated against
-returned so you can watch that happen.
+**Shut valve** drives the metering needle onto its seat. The compression path closes, but the
+refill check valve is still there, so the cylinder is held one way and free the other.
 
-The **entrained air** slider is the interesting one. Half a percent of gas is enough to
-destroy the incompressibility assumption at low pressure and give the strut a soft-then-hard
-characteristic, which is exactly why these cylinders are bled carefully in commissioning.
+**Port block** shuts a pair of pilot-operated check valves mounted *on the cylinder port
+itself*, upstream of everything, so the chamber is isolated from the whole manifold — relief
+included — in **both directions**. That is how load-holding lock valves are really plumbed: a
+burst hose must not be able to drop the load. Holding in extension only means something if
+the cylinder can pull, so the bench rod is bolted to the anvil; turn **Rod bolted** off and
+you get the honest alternative, where the chamber still cannot take water in but the rig
+simply lifts off and the lock holds nothing.
+
+With a real block, piston travel collapses to a fraction of a millimetre and the load
+*bounces* — a sealed chamber stores energy elastically and hands it straight back, where an
+orifice turns it into heat. The energy-budget bar splits dissipated against returned.
+
+Nothing seals perfectly. **Seat leakage** is a real valve specification, and at anything above
+zero a held load does not stop, it *creeps*, at a rate the readout gives in mm/min. Set it to
+zero for the textbook answer.
+
+The **entrained air** slider is the other interesting one. Half a percent of gas destroys the
+incompressibility assumption at low pressure and gives the strut a soft-then-hard
+characteristic — exactly why these cylinders are bled carefully in commissioning.
+
+### Closing time and surge
+
+A valve that shuts instantly is a modelling convenience that hides the most important
+consequence of shutting one. The metering path carries the **inertia of the water column in
+the line**, so flow is a state rather than an instantaneous function of pressure:
+
+```
+(rho*L/A_line) * dQ/dt = p - dp_valve(Q) - dp_line(Q)
+```
+
+Decelerating that column against a closing valve is what produces the pressure surge — it is
+not added on top, it falls out. How big it gets depends on the **closing time** against the
+line's own period `2L/c`:
+
+| Closing time | Result at the default 1.5 m line (2L/c = 2.1 ms) |
+|---|---|
+| 2 ms | ~60 bar surge, most of the Joukowsky bound `rho*c*dv` |
+| 40 ms | no surge above working pressure |
+| 600 ms | no surge; the wave relieves back up the line as it forms |
+
+Lengthen the line and the same closure gets worse. This is the whole reason valve closing
+rates get specified in hydraulic circuits.
+
+The stem does not move linearly either — it follows a **modified equal-percentage
+characteristic** with rangeability 50, so half travel is only about 12 % of full flow area and
+almost all the metering happens in the last part of the stroke.
 
 ---
 
@@ -53,20 +92,23 @@ the orifice and relief valve decide how easily it leaves; whatever cannot leave 
 the water.
 
 ```
-dp/dt = (beta_eff / V) * ( A_p * u  -  Q_out(p) )
+dp/dt = (beta_eff / V) * ( A_p*u - Q_line - Q_relief - Q_check )
 
-Q_out = Cd*A_o*sqrt(2p/rho)  +  Cd*A_r*sqrt(2(p - p_set)/rho)     [relief term when p > p_set]
-        -Cd*A_cv*sqrt(-2p/rho)                                     [check-valve refill when p < 0]
+Q_relief, Q_check = Cd*A*sqrt(2*dp/rho)          quasi-steady, on the manifold block
+Q_line                                            a state; see closing time and surge above
 
 1/beta_eff = (1 - x)/beta_water + x/p_abs        gas fraction x shrinking isothermally
 ```
 
 That one equation covers the whole story:
 
-* **Orifice open** — the pressure term equilibrates almost instantly and you recover the
+* **Metering path open** — the pressure term equilibrates almost instantly and you recover the
   classic square-law damper, `F ∝ u²`.
-* **Orifice shut** — `Q_out = 0` and the same equation is a very stiff spring of rate
-  `k = beta*A²/V`. Nothing is switched; the physics changes character on its own.
+* **Every path shut** — the flow terms go to zero and the same equation is a very stiff spring
+  of rate `k = beta*A²/V`. Nothing is switched; the physics changes character on its own.
+
+Water will not hold tension below its vapour pressure, so the chamber is clamped at 850 Pa
+absolute and flagged as cavitating rather than allowed to pull an unphysical vacuum.
 
 Integration is semi-implicit in pressure:
 
@@ -93,6 +135,10 @@ tension only.
 | Water depth | 300 m (31.2 bar ambient) |
 | Wire stiffness | 1.3 MN/m |
 | Added mass | 1.0 × dry mass |
+| Metering line bore | 50 mm |
+| Wave speed in line | 1400 m/s |
+| Valve characteristic | Equal percentage, R = 50 |
+| Vapour pressure | 850 Pa absolute |
 | Integration step | 50 µs |
 
 Sizing is deliberately close to the published devices. The 5.5 mm default orifice is what
@@ -109,9 +155,13 @@ it lands inside the 3–10 mm range quoted in US 10,995,465.
   is not modelled.
 - Soil is a rigid foundation — no bearing failure, no suction on retrieval, no water
   entrapment under the mudmat.
-- Valve dynamics are quasi-steady, so relief-valve chatter and genuine distributed water
-  hammer do not appear. The Joukowsky figure on the lock readout is an indicator, not a
-  solved transient.
+- The line is a single lumped inertance, not a distributed wave model. It gives the right
+  surge magnitude and the right dependence on closing time, but not the reflected wave train
+  that follows.
+- Relief and check valves stay quasi-steady, so poppet chatter does not appear.
+- Cavitation is a pressure clamp at the vapour point, not a two-phase model. The readout will
+  tell you the water has boiled; the subsequent void collapse — the part that damages
+  hardware — is not simulated.
 - Seal friction is a single Coulomb term.
 
 It is a teaching model with defensible numbers, not an installation analysis.

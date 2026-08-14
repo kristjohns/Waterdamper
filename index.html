@@ -232,6 +232,17 @@
   }
 
   .ctl { display: flex; flex-direction: column; gap: 13px; }
+  .ctl-group {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--safety-d);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 5px;
+    margin-top: 3px;
+  }
+  .ctl-group:first-child { margin-top: 0; }
   .ctl-row label {
     display: flex;
     justify-content: space-between;
@@ -512,16 +523,20 @@
     <div>
       <h2>The model</h2>
       <p>Both modes run the same lumped-parameter chamber. Compression drives flow out of the
-        cap volume; the orifice and relief valve set how easily it leaves; whatever cannot leave
-        compresses the water itself.</p>
-      <div class="eq">dp/dt = (&beta;<i>eff</i> / V) &middot; ( A<i>p</i>&middot;u &minus; Q<i>out</i>(p) )</div>
-      <div class="eq">Q<i>out</i> = C<i>d</i>&middot;A<i>o</i>&middot;&radic;(2p/&rho;) &nbsp;+&nbsp; C<i>d</i>&middot;A<i>r</i>&middot;&radic;(2(p&minus;p<i>set</i>)/&rho;)</div>
-      <p>That single equation covers the whole story. With the orifice open, the pressure term
-        equilibrates almost instantly and you recover the classic square-law damper,
+        cap volume; the valves set how easily it leaves; whatever cannot leave compresses the
+        water itself.</p>
+      <div class="eq">dp/dt = (&beta;<i>eff</i> / V) &middot; ( A<i>p</i>&middot;u &minus; Q<i>line</i> &minus; Q<i>relief</i> &minus; Q<i>check</i> )</div>
+      <p>That one equation covers the whole story. With the metering path open, the pressure
+        term equilibrates almost instantly and you recover the classic square-law damper,
         <span style="font-family:var(--mono);font-size:13px;color:var(--sonar)">F &prop; u&sup2;</span>.
-        With the orifice shut, Q<i>out</i> = 0 and the same equation becomes a very stiff spring
-        of rate <span style="font-family:var(--mono);font-size:13px;color:var(--sonar)">k = &beta;A&sup2;/V</span>.
+        With every path shut, the flow terms go to zero and the same equation becomes a very
+        stiff spring of rate
+        <span style="font-family:var(--mono);font-size:13px;color:var(--sonar)">k = &beta;A&sup2;/V</span>.
         Nothing is switched; the physics changes character on its own.</p>
+      <p>The metering term is a state rather than a function of pressure, because the water in
+        the line has mass &mdash; see <em>Why closing time matters</em>. The relief poppet and
+        the refill check sit on the manifold block and stay quasi-steady:</p>
+      <div class="eq">Q = C<i>d</i>&middot;A(t)&middot;&radic;(2&Delta;p/&rho;)</div>
       <p>Effective bulk modulus follows seawater at <strong>2.34 GPa</strong>, corrected for
         entrained gas by <span style="font-family:var(--mono);font-size:12.5px">1/&beta; =
         (1&minus;x)/&beta;<i>w</i> + x/p<i>abs</i></span> with the gas fraction shrinking
@@ -531,15 +546,27 @@
 
     <div>
       <h2>Stopping the flow</h2>
-      <p>Switch to <strong>Hydraulic lock</strong> and close the metering valve, or hit
-        <em>Block ports</em> to shut the pilot-operated check valve as well. The water now has
-        nowhere to go, and the damper stops being a damper.</p>
-      <p>What you get instead is a spring made of water. At the default bench setting the piston
-        moves a few millimetres rather than the full 600 mm stroke, chamber pressure jumps to
-        several hundred bar, and the load <strong>bounces</strong> &mdash; because a locked
-        chamber stores energy elastically and gives it straight back, where an orifice turns it
-        into heat. The <em>dissipated</em> and <em>returned</em> readouts split that budget for
-        you.</p>
+      <p>There are two ways to stop it in <strong>Hydraulic lock</strong>, and they are not the
+        same thing. <em>Shut valve</em> drives the metering needle onto its seat: the compression
+        path closes, but the refill check valve is still there, so the cylinder is held one way
+        and free the other. <em>Port block</em> shuts a pair of pilot-operated check valves
+        mounted <strong>on the cylinder port itself</strong>, upstream of everything, so the
+        chamber is isolated from the whole manifold &mdash; relief included &mdash; in
+        <strong>both directions</strong>. That is how load-holding lock valves are actually
+        plumbed: a burst hose must not be able to drop the load.</p>
+      <p>Holding in extension only means something if the cylinder can pull, so the bench rod is
+        bolted to the anvil. Turn <em>Rod bolted</em> off and you get the honest alternative: the
+        chamber still cannot take water in, but the rig simply lifts off the anvil, and the lock
+        holds nothing.</p>
+      <p>What a real block gives you is a spring made of water. The piston moves a fraction of a
+        millimetre rather than the full 600 mm stroke, and the load <strong>bounces</strong>
+        &mdash; a sealed chamber stores energy elastically and hands it straight back, where an
+        orifice turns it into heat. The <em>dissipated</em> and <em>returned</em> readouts split
+        that budget for you.</p>
+      <p>Nothing here seals perfectly. <strong>Seat leakage</strong> is a real valve
+        specification, and at anything above zero a held load does not stop &mdash; it
+        <em>creeps</em>, at a rate the readout reports in millimetres per minute. Set it to zero
+        for the textbook answer; leave it at 0.02&nbsp;% for something closer to a metal seat.</p>
       <p>The lock is also a good way to see what "incompressible" really costs. At 300 bar the
         trapped water has given up about <strong>1.3&nbsp;percent</strong> of its volume &mdash;
         small, but not zero, and on a 17-litre chamber that is the whole of the piston travel
@@ -547,6 +574,30 @@
         assumption falls apart entirely: the strut goes soft at low pressure and only stiffens up
         once the bubbles have been squeezed out of existence. That soft-then-hard curve is a real
         commissioning problem, and it is why these cylinders are bled carefully.</p>
+    </div>
+
+    <div>
+      <h2>Why closing time matters</h2>
+      <p>A valve that shuts instantly is a modelling convenience that hides the most important
+        consequence of shutting one. The metering path here carries the <strong>inertia of the
+        water column in the line</strong>, so flow is a state of its own rather than an
+        instantaneous function of pressure:</p>
+      <div class="eq">(&rho;L/A<i>line</i>) &middot; dQ/dt = p &minus; &Delta;p<i>valve</i>(Q) &minus; &Delta;p<i>line</i>(Q)</div>
+      <p>Decelerating that column against a closing valve is what produces the pressure surge.
+        It is not added on top of the model &mdash; it falls out of it, and the size of it
+        depends on how the <strong>closing time</strong> compares with the line's own period,
+        <span style="font-family:var(--mono);font-size:13px;color:var(--sonar)">2L/c</span>.</p>
+      <p>Shut the default 1.5 m line in 2 ms and the surge reaches most of the Joukowsky bound
+        <span style="font-family:var(--mono);font-size:13px;color:var(--sonar)">&rho;c&Delta;v</span>,
+        because the far end of the column has no idea yet that the valve has moved. Take
+        600 ms over it and there is no surge at all: the pressure wave has time to run back up
+        the line and relieve. Lengthen the line and the same closure gets worse. This is the
+        whole reason valve closing rates are specified in hydraulic circuits.</p>
+      <p>The stem itself does not move linearly either. It follows a <strong>modified
+        equal-percentage characteristic</strong> with a rangeability of 50, so half travel is
+        only about 12&nbsp;percent of full flow area and almost all the useful metering happens
+        in the last part of the stroke &mdash; which is why the commanded-opening slider feels
+        so unevenly weighted, and why real needle valves are trimmed the way they are.</p>
     </div>
 
     <div>
@@ -563,6 +614,10 @@
         <div><dt>Water depth</dt><dd>300 m (31.2 bar ambient)</dd></div>
         <div><dt>Wire stiffness</dt><dd>1.3 MN/m</dd></div>
         <div><dt>Added mass</dt><dd>1.0 &times; dry mass</dd></div>
+        <div><dt>Metering line bore</dt><dd>50 mm</dd></div>
+        <div><dt>Wave speed in line</dt><dd>1400 m/s</dd></div>
+        <div><dt>Valve characteristic</dt><dd>Equal %, R = 50</dd></div>
+        <div><dt>Vapour pressure</dt><dd>850 Pa abs</dd></div>
         <div><dt>Integration step</dt><dd>50 &micro;s</dd></div>
       </dl>
       <p style="margin-top:14px;font-size:14px;color:var(--mist)">Sizing is deliberately close to
@@ -578,9 +633,13 @@
         than the depth- and proximity-dependent coefficient DNV-RP-N103 would have you use, and
         the sharp rise in added mass as a mudmat approaches the seabed is not modelled. Soil is a
         rigid foundation, so there is no bearing failure, no suction on retrieval and no water
-        entrapment under the mudmat. Valve dynamics are quasi-steady, so relief-valve chatter and
-        genuine distributed water hammer do not appear; the Joukowsky figure shown on the lock
-        readout is an indicator, not a solved transient. Seal friction is a single Coulomb term.</p>
+        entrapment under the mudmat. Seal friction is a single Coulomb term.</p>
+      <p>The line is a single lumped inertance, not a distributed wave model, so it gives the
+        right surge magnitude and the right dependence on closing time but not the reflected
+        wave train that follows. Relief and check valves are quasi-steady, so poppet chatter does
+        not appear. Cavitation is a pressure clamp at the vapour point, not a two-phase model:
+        the readout will tell you the water has boiled, but the subsequent void collapse &mdash;
+        which is the part that damages hardware &mdash; is not simulated.</p>
       <p>It is a teaching model with defensible numbers, not an installation analysis.</p>
     </div>
 
@@ -633,6 +692,14 @@ const A_CHECK = 4.0e-3;      // check valve, effectively unrestricted refill
 const A_RELIEF= 3.3e-4;      // relief poppet flow area, m2
 const LEG_EXT = 1.20;        // leg protrusion below mudmat when extended, m
 
+const P_VAP   = 850;         // seawater vapour pressure near 4 C, Pa absolute
+const D_LINE  = 0.050;       // metering line bore, m
+const A_LINE  = Math.PI * D_LINE * D_LINE / 4;
+const K_LINE  = 2.5;         // entrance + bend loss coefficient for the line
+const C_WAVE  = 1400;        // pressure wave speed in a filled steel line, m/s
+const VALVE_R = 50;          // equal-percentage valve rangeability
+const L_LINE_FIXED = 1.2;    // landing legs: manifold close-coupled to the port
+
 const K_WIRE  = 1.30e6;      // N/m
 const Z_WIRE  = 1.9e4;       // wire damping, N.s/m
 const K_STEEL = 6.0e8;       // rigid steel-on-steel contact, N/m
@@ -660,11 +727,14 @@ const CONTROLS = {
     { id: 'relief',  label: 'Relief setting',         unit: 'bar', min: 40,  max: 220, step: 5,    val: 110 }
   ],
   bench: [
-    { id: 'vimp',    label: 'Impact velocity',        unit: 'm/s', min: 0.1, max: 1.5, step: 0.05, val: 0.50 },
-    { id: 'dmass',   label: 'Drop mass',              unit: 't',   min: 1,   max: 30,  step: 0.5,  val: 8 },
-    { id: 'valve',   label: 'Metering valve opening', unit: '%',   min: 0,   max: 100, step: 1,    val: 100 },
-    { id: 'air',     label: 'Entrained air',          unit: '%',   min: 0,   max: 3,   step: 0.05, val: 0 },
-    { id: 'relief2', label: 'Relief setting',         unit: 'bar', min: 40,  max: 400, step: 5,    val: 150 }
+    { id: 'vimp',    label: 'Impact velocity',   unit: 'm/s', min: 0.1, max: 1.5, step: 0.05, val: 0.50, group: 'Load' },
+    { id: 'dmass',   label: 'Drop mass',         unit: 't',   min: 1,   max: 30,  step: 0.5,  val: 8,    group: 'Load' },
+    { id: 'valve',   label: 'Commanded opening', unit: '%',   min: 0,   max: 100, step: 1,    val: 100,  group: 'Metering valve' },
+    { id: 'vclose',  label: 'Closing time',      unit: 'ms',  min: 2,   max: 600, step: 2,    val: 40,   group: 'Metering valve' },
+    { id: 'leak',    label: 'Seat leakage',      unit: '%',   min: 0,   max: 0.5, step: 0.01, val: 0.02, group: 'Metering valve' },
+    { id: 'lline',   label: 'Line length',       unit: 'm',   min: 0.2, max: 6,   step: 0.1,  val: 1.5,  group: 'Circuit' },
+    { id: 'relief2', label: 'Relief setting',    unit: 'bar', min: 40,  max: 400, step: 5,    val: 150,  group: 'Circuit' },
+    { id: 'air',     label: 'Entrained air',     unit: '%',   min: 0,   max: 3,   step: 0.05, val: 0,    group: 'Circuit' }
   ]
 };
 
@@ -687,8 +757,13 @@ const S = {
   eIn: 0, eDiss: 0,    // J, per whole damper set
   vOut: 0,             // cumulative fluid expelled, m3
   rigid: false,
-  blocked: false,
-  bounces: 0,
+  lock: false,          // port-mounted double pilot check shut: both ways blocked
+  shut: false,          // metering valve commanded to its seat
+  bolted: true,         // bench rod bolted down, so the damper can pull as well
+  vpos: 1,              // actual metering valve stem position, 0..1
+  q: 0,                 // metering line flow, m3/s, + = out of the chamber
+  cav: false,
+  surge: 0, peakSurge: 0, peakVline: 0, rebound: 0,
   wasContact: false,
   jet: 0,              // 0..1, drives the jet particles
   flash: 0,
@@ -713,62 +788,122 @@ function effectiveBeta(pAbs) {
   return 1 / ((1 - xg) / BETA_W + xg / pa);
 }
 
-function orificeArea() {
-  if (S.blocked) return 0;
-  if (S.mode === 'bench') return VALVE_FULL * (P.valve / 100);
-  const d = P.orifice / 1000;
-  return Math.PI * d * d / 4;
+/* Seat leakage area. Whatever is doing the sealing - the metering valve on its
+   seat, or the pilot checks when the port block is engaged - leaks a little.
+   At 0 % the seal is ideal, which is the only unrealistic setting here. */
+function leakArea() {
+  return S.mode === 'bench' ? (P.leak / 100) * VALVE_FULL : 0;
+}
+
+/* Metering restriction. The landing legs meter through a fixed drilled orifice,
+   which is what the real cylinders use; the bench has an adjustable valve with
+   a modified equal-percentage characteristic, so most of the flow change
+   happens in the last part of the stem travel. */
+function meterArea() {
+  if (S.mode === 'landing') {
+    const d = P.orifice / 1000;
+    return Math.PI * d * d / 4;
+  }
+  const x = Math.min(1, Math.max(0, S.vpos));
+  const a = VALVE_FULL * (Math.pow(VALVE_R, x) - 1) / (VALVE_R - 1);
+  return Math.max(leakArea(), a);
 }
 
 function reliefSet() {
   return (S.mode === 'bench' ? P.relief2 : P.relief) * 1e5;
 }
 
-/* Signed flow out of the cap chamber, and its derivative w.r.t. pressure.
-   Positive p pushes water out through orifice + relief; negative p draws it
-   back in through the check valve (blocked when both ports are shut). */
-function flowOut(p) {
-  const k = Math.sqrt(2 / RHO);
-  if (p >= 0) {
-    const pe = Math.max(p, 100);
-    const Ao = orificeArea();
-    let q  = CD * Ao * k * Math.sqrt(pe);
-    let dq = CD * Ao * k * 0.5 / Math.sqrt(pe);
-    const ps = reliefSet();
-    if (p > ps && !S.blocked) {
-      const dp = Math.max(p - ps, 100);
-      q  += CD * A_RELIEF * k * Math.sqrt(dp);
-      dq += CD * A_RELIEF * k * 0.5 / Math.sqrt(dp);
-    }
-    return [q, dq];
-  }
-  if (S.blocked) return [0, 0];
-  const pe = Math.max(-p, 100);
-  return [-CD * A_CHECK * k * Math.sqrt(pe), CD * A_CHECK * k * 0.5 / Math.sqrt(pe)];
+function lineLen() {
+  return S.mode === 'bench' ? P.lline : L_LINE_FIXED;
 }
 
-/* One chamber update. u is the compression rate, m/s (positive = closing). */
+/* Valve stem travel is rate limited, so shutting takes real time. That is what
+   decides whether the closure makes a surge: compare it against the line's
+   period 2L/c. */
+function stepValve(dt) {
+  if (S.mode !== 'bench') { S.vpos = 1; return; }
+  const target = S.shut ? 0 : P.valve / 100;
+  const rate = dt / Math.max(0.002, P.vclose / 1000);
+  const d = target - S.vpos;
+  S.vpos += Math.abs(d) <= rate ? d : Math.sign(d) * rate;
+}
+
+/* One chamber update. u is the compression rate, m/s (positive = closing).
+
+   The metering path carries the inertia of the water column in the line, so it
+   is a state rather than an instantaneous function of pressure. Decelerating
+   that column against a closing valve is what produces the pressure surge -
+   it is not added on top, it falls out. The relief and refill valves sit on the
+   manifold block and stay quasi-steady.
+
+   Engaging the port block shuts pilot-operated check valves mounted at the
+   cylinder port itself, upstream of everything else, so the chamber is isolated
+   from the whole manifold in both directions - relief included. That is how
+   load-holding lock valves are actually plumbed: a burst hose must not drop
+   the load. */
 function stepChamber(dt, u) {
-  const V   = Math.max(V_DEAD, V_CAP0 - A_P * S.x);
-  const bet = effectiveBeta(S.p + P_AMB);
-  const c   = bet / V;
-  const [q, dq] = flowOut(S.p);
-  const dp = dt * c * (A_P * u - q) / (1 + dt * c * dq);
-  S.p = Math.min(1.2e9, Math.max(-P_AMB * 0.98, S.p + dp));
+  const V    = Math.max(V_DEAD, V_CAP0 - A_P * S.x);
+  const bet  = effectiveBeta(S.p + P_AMB);
+  const n    = nLegs();
+  const locked = S.lock;
 
-  const qNow = flowOut(S.p)[0];
-  if (qNow > 0) {
-    S.vOut  += qNow * dt * nLegs();
-    S.eDiss += S.p * qNow * dt * nLegs();
+  /* --- metering line: inertance in series with the valve restriction ----- */
+  const Am   = Math.max(locked ? leakArea() : meterArea(), 1e-10);
+  const I    = RHO * lineLen() / A_LINE;
+  const kRes = 0.5 * RHO * (1 / (CD * CD * Am * Am) + K_LINE / (A_LINE * A_LINE));
+  const D    = kRes * S.q * Math.abs(S.q);
+  const Dp   = 2 * kRes * Math.abs(S.q);
+  const dq   = dt * (S.p - D) / I / (1 + dt * Dp / I);
+  S.q += dq;
+  S.surge = Math.abs(I * dq / dt);
+
+  /* --- relief and refill, both isolated by the port block --------------- */
+  const k = Math.sqrt(2 / RHO);
+  let qr = 0, qrp = 0, qc = 0, qcp = 0;
+  if (!locked) {
+    const ps = reliefSet();
+    if (S.p > ps) {
+      const d2 = Math.max(S.p - ps, 100);
+      qr  = CD * A_RELIEF * k * Math.sqrt(d2);
+      qrp = CD * A_RELIEF * k * 0.5 / Math.sqrt(d2);
+    }
+    if (S.p < 0) {
+      const d3 = Math.max(-S.p, 100);
+      qc  = -CD * A_CHECK * k * Math.sqrt(d3);
+      qcp = CD * A_CHECK * k * 0.5 / Math.sqrt(d3);
+    }
   }
-  S.jet = Math.min(1, Math.max(S.jet * 0.94, Math.min(1, qNow / 2.0e-3)));
+
+  /* --- chamber ---------------------------------------------------------- */
+  const c  = bet / V;
+  const dp = dt * c * (A_P * u - (S.q + qr + qc)) / (1 + dt * c * (qrp + qcp));
+  S.p += dp;
+
+  // Water will not hold tension below its vapour pressure; it boils instead.
+  S.cav = false;
+  if (S.p + P_AMB < P_VAP) { S.p = P_VAP - P_AMB; S.q = Math.min(S.q, 0); S.cav = true; }
+  S.p = Math.min(1.2e9, S.p);
+
+  const out = Math.max(0, S.q) + qr;
+  S.vOut  += out * dt * n;
+  S.eDiss += Math.abs(S.p) * (Math.abs(S.q) + qr + Math.abs(qc)) * dt * n;
+
+  S.peakVline = Math.max(S.peakVline, Math.abs(S.q) / A_LINE);
+  S.peakSurge = Math.max(S.peakSurge, S.surge);
+  S.jet = Math.min(1, Math.max(S.jet * 0.94, Math.min(1, (out) / 2.0e-3)));
 }
+
+/* The bench rod is bolted to the anvil, so the cylinder is a two-way strut and
+   a locked chamber can hold the load down as well as up. A landing leg only
+   rests its foot on the foundation, so it can never pull - it just lifts off. */
+function twoWay() { return S.mode === 'bench' && S.bolted; }
 
 function legForce(dt, u) {
   // Returns upward force from the whole leg set, N.
-  if (S.x <= 0) {
+  if (S.x <= 0 && !twoWay()) {
     // Out of contact: let the check valve refill the chamber.
-    S.p *= Math.exp(-dt / 0.02);
+    if (!S.lock) S.p *= Math.exp(-dt / 0.02);
+    S.q *= Math.exp(-dt / 0.02);
     S.jet *= 0.9;
     return 0;
   }
@@ -778,10 +913,10 @@ function legForce(dt, u) {
   }
   stepChamber(dt, u);
   const n = nLegs();
-  let f = n * A_P * Math.max(S.p, 0);
+  let f = n * A_P * (twoWay() ? S.p : Math.max(S.p, 0));
   if (S.x > STROKE) f += K_END * (S.x - STROKE) + 4e6 * Math.max(u, 0);
   if (Math.abs(u) > 1e-4) f += n * F_SEAL * Math.sign(u);
-  return Math.max(0, f);
+  return twoWay() ? f : Math.max(0, f);
 }
 
 function stepLanding(dt) {
@@ -827,11 +962,16 @@ function stepBench(dt) {
   S.x = Math.max(0, LEG_EXT - S.z);
   const u = S.x > 0 ? -S.v : 0;
   if (S.x > 0 && !S.wasContact) { S.vImpact = -S.v; S.wasContact = true; S.flash = 1; }
-  if (S.x <= 0 && S.wasContact) { S.wasContact = false; S.bounces++; }
-  S.contact = S.x > 0;
+  if (S.x <= 0 && S.wasContact) S.wasContact = false;
+  S.contact = S.x > 0 || twoWay();
+  if (S.vImpact > 0) S.rebound = Math.max(S.rebound, S.v);
 
   const Fd = -0.5 * RHO * 1.0 * 4 * S.v * Math.abs(S.v);
-  const Fl = legForce(dt, u);
+  let Fl = legForce(dt, u);
+  // A bolted rod cannot extend past the cylinder's own end stop.
+  if (twoWay() && S.z > LEG_EXT) {
+    Fl -= K_END * (S.z - LEG_EXT) + 4e6 * Math.max(S.v, 0);
+  }
   if (S.contact && u > 0) S.eIn += Fl * u * dt;
 
   const a = (Fl - W + Fd) / m;
@@ -845,6 +985,7 @@ function stepBench(dt) {
 }
 
 function step(dt) {
+  stepValve(dt);
   if (S.mode === 'landing') stepLanding(dt); else stepBench(dt);
   S.t += dt;
   S.flash = Math.max(0, S.flash - dt * 3);
@@ -861,11 +1002,13 @@ function step(dt) {
    ===================================================================== */
 
 function reset() {
-  S.t = 0; S.v = 0; S.p = 0; S.x = 0;
+  S.t = 0; S.v = 0; S.p = 0; S.x = 0; S.q = 0;
   S.peakF = 0; S.peakP = 0; S.peakX = 0;
   S.eIn = 0; S.eDiss = 0; S.vOut = 0;
   S.vImpact = 0; S.contact = false; S.wasContact = false;
-  S.bounces = 0; S.jet = 0; S.flash = 0;
+  S.jet = 0; S.flash = 0; S.cav = false;
+  S.surge = 0; S.peakSurge = 0; S.peakVline = 0; S.rebound = 0;
+  S.vpos = S.mode === 'bench' ? (S.shut ? 0 : P.valve / 100) : 1;
   S.trace.length = 0;
   S.legF = 0; S.wireT = 0;
 
@@ -1002,6 +1145,15 @@ function drawCutaway(ctx, box, detail) {
   rr(ctx, cx - barW * 0.58, footTop, barW * 1.16, footH, 2);
   ctx.fill();
 
+  // Bolts, when the foot is fixed down and the cylinder can carry tension.
+  if (twoWay()) {
+    ctx.fillStyle = COL.safety;
+    for (const s of [-1, 1]) {
+      ctx.fillRect(cx + s * barW * 0.44 - 1.5, footTop + footH * 0.15,
+                   3, footH * 0.7 + (anvilY - footTop - footH) + H * 0.02);
+    }
+  }
+
   // head-side volume (below piston, vented to sea)
   ctx.fillStyle = '#0a2733';
   ctx.fillRect(cx - inner / 2, pistonB, inner, (barTop + barH - wall) - pistonB);
@@ -1039,15 +1191,48 @@ function drawCutaway(ctx, box, detail) {
   const mx = box.x + box.w * 0.62;
   const my = box.y + H * 0.20;
   const mh = H * 0.42;
+  const tight = mw < 130;
 
+  const portY = barTop + wall * 1.7;
+  const elbowX = mx - mw * 0.22;
   ctx.strokeStyle = COL.steel;
   ctx.lineWidth = Math.max(3, H * 0.013);
   ctx.beginPath();
-  ctx.moveTo(cx + barW / 2 - wall, barTop + wall * 1.7);
-  ctx.lineTo(mx - mw * 0.22, barTop + wall * 1.7);
-  ctx.lineTo(mx - mw * 0.22, my + mh * 0.16);
+  ctx.moveTo(cx + barW / 2 - wall, portY);
+  ctx.lineTo(elbowX, portY);
+  ctx.lineTo(elbowX, my + mh * 0.16);
   ctx.lineTo(mx, my + mh * 0.16);
   ctx.stroke();
+
+  // The port block sits on the cylinder itself, upstream of the manifold.
+  const bx0 = cx + barW / 2 + (elbowX - cx - barW / 2) * 0.30;
+  drawValveSym(ctx, 'block', bx0, portY, Math.min(9, H * 0.030),
+               !S.lock, S.lock ? COL.alarm : COL.sonar);
+
+  // Live flow direction and rate in the line.
+  const vLine = S.q / A_LINE;
+  if (Math.abs(vLine) > 0.03) {
+    const dir = vLine > 0 ? 1 : -1;
+    const x0 = bx0 + Math.min(26, H * 0.09), x1 = elbowX - 6;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, 0.35 + Math.abs(vLine) / 4);
+    ctx.strokeStyle = COL.ice; ctx.lineWidth = 1.6;
+    for (let i = 0; i < 3; i++) {
+      const ph = ((S.t * 3 + i / 3) % 1);
+      const ax = dir > 0 ? x0 + ph * (x1 - x0) : x1 - ph * (x1 - x0);
+      ctx.beginPath();
+      ctx.moveTo(ax - dir * 5, portY - 4);
+      ctx.lineTo(ax, portY);
+      ctx.lineTo(ax - dir * 5, portY + 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (!tight) {
+    label(ctx, 'LINE ' + lineLen().toFixed(1) + ' m  ·  ' + vLine.toFixed(1) + ' m/s',
+          (bx0 + elbowX) / 2, portY + Math.max(13, H * 0.042),
+          Math.abs(vLine) > 0.1 ? COL.ice : COL.dim, 9, 'center');
+  }
 
   ctx.fillStyle = COL.panel;
   ctx.strokeStyle = COL.line;
@@ -1055,15 +1240,23 @@ function drawCutaway(ctx, box, detail) {
   rr(ctx, mx, my, mw, mh, 3);
   ctx.fill(); ctx.stroke();
 
-  const tight = mw < 130;
+  const mA = meterArea();
   const rows = [
-    { name: tight ? 'ORIFICE' : 'METERING ORIFICE', open: !S.blocked && orificeArea() > 1e-9,
-      note: S.mode === 'bench' ? P.valve.toFixed(0) + ' % open'
-                               : P.orifice.toFixed(1) + ' mm' },
-    { name: tight ? 'RELIEF' : 'RELIEF VALVE', open: !S.blocked && S.p > reliefSet(),
-      note: (reliefSet() / 1e5).toFixed(0) + ' bar' },
-    { name: tight ? 'CHECK' : 'PILOT CHECK', open: !S.blocked,
-      note: S.blocked ? 'blocked' : 'refill' }
+    { sym: 'block',
+      name: tight ? 'PORT BLOCK' : 'PORT BLOCK — 2x PILOT CHECK',
+      open: !S.lock,
+      note: S.lock ? (tight ? 'shut' : 'shut both ways') : (tight ? 'open' : 'passing') },
+    { sym: 'needle',
+      name: tight ? 'METERING' : 'METERING VALVE',
+      open: !S.lock && mA > leakArea() * 1.5,
+      note: S.mode === 'bench'
+              ? (tight ? (S.vpos * 100).toFixed(0) + ' %'
+                       : (S.vpos * 100).toFixed(0) + ' % · ' + (mA * 1e6).toFixed(1) + ' mm2')
+              : P.orifice.toFixed(1) + ' mm' },
+    { sym: 'relief',
+      name: tight ? 'RELIEF' : 'RELIEF VALVE',
+      open: !S.lock && S.p > reliefSet(),
+      note: S.lock ? 'isolated' : (reliefSet() / 1e5).toFixed(0) + ' bar' }
   ];
   const fs = tight ? 9 : 10;
   const rh = mh / 3;
@@ -1071,13 +1264,10 @@ function drawCutaway(ctx, box, detail) {
     const ry = my + rh * i;
     ctx.strokeStyle = COL.line;
     if (i) { ctx.beginPath(); ctx.moveTo(mx, ry); ctx.lineTo(mx + mw, ry); ctx.stroke(); }
-    const col = r.open ? COL.sonar : COL.dim;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(mx + 12, ry + rh / 2, 3.4, 0, Math.PI * 2);
-    ctx.fill();
-    label(ctx, r.name, mx + 21, ry + rh / 2 - 6, r.open ? COL.chalk : COL.dim, fs);
-    label(ctx, r.note, mx + 21, ry + rh / 2 + 7, col, fs);
+    const col = r.open ? COL.sonar : (r.sym === 'block' && S.lock ? COL.alarm : COL.dim);
+    drawValveSym(ctx, r.sym, mx + 16, ry + rh / 2, Math.min(11, rh * 0.32), r.open, col);
+    label(ctx, r.name, mx + 32, ry + rh / 2 - 6, r.open ? COL.chalk : COL.dim, fs);
+    label(ctx, r.note, mx + 32, ry + rh / 2 + 7, col, fs);
   });
 
   /* ---- jets leaving the metered port ---- */
@@ -1125,6 +1315,61 @@ function drawCutaway(ctx, box, detail) {
   label(ctx, 'ANVIL', box.x + box.w * 0.05, anvilY + H * 0.035, COL.dim, 9);
 
   return geo;
+}
+
+/* Simplified hydraulic symbols. Each shows its actual state: a check ball on or
+   off its seat, a needle in or out of its bore, a relief poppet lifted or shut. */
+function drawValveSym(ctx, kind, x, y, s, open, col) {
+  ctx.save();
+  ctx.strokeStyle = col;
+  ctx.fillStyle = col;
+  ctx.lineWidth = 1.3;
+
+  if (kind === 'block') {
+    // two check valves back to back: one blocks each direction
+    for (const dir of [-1, 1]) {
+      const cx = x + dir * s * 0.62;
+      ctx.beginPath();                         // seat
+      ctx.moveTo(cx + dir * s * 0.34, y - s * 0.55);
+      ctx.lineTo(cx + dir * s * 0.34, y + s * 0.55);
+      ctx.stroke();
+      const off = open ? -dir * s * 0.42 : 0;  // ball lifts off seat when passing
+      ctx.beginPath();
+      ctx.arc(cx + off, y, s * 0.34, 0, Math.PI * 2);
+      if (open) ctx.stroke(); else ctx.fill();
+    }
+  } else if (kind === 'needle') {
+    ctx.beginPath();                           // bore
+    ctx.moveTo(x - s * 0.9, y + s * 0.75);
+    ctx.lineTo(x + s * 0.9, y + s * 0.75);
+    ctx.stroke();
+    const lift = s * 0.75 * (open ? 0.75 : 0); // stem retracts as it opens
+    ctx.beginPath();                           // conical needle
+    ctx.moveTo(x - s * 0.55, y - s * 0.85 - lift);
+    ctx.lineTo(x + s * 0.55, y - s * 0.85 - lift);
+    ctx.lineTo(x, y + s * 0.7 - lift);
+    ctx.closePath();
+    if (open) ctx.stroke(); else ctx.fill();
+  } else {
+    ctx.beginPath();                           // relief poppet
+    const lift = open ? s * 0.45 : 0;
+    ctx.moveTo(x - s * 0.7, y + s * 0.8);
+    ctx.lineTo(x + s * 0.7, y + s * 0.8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.55, y + s * 0.25 - lift);
+    ctx.lineTo(x + s * 0.55, y + s * 0.25 - lift);
+    ctx.lineTo(x, y + s * 0.8 - lift);
+    ctx.closePath();
+    if (open) ctx.stroke(); else ctx.fill();
+    ctx.beginPath();                           // spring
+    for (let i = 0; i <= 6; i++) {
+      const yy = y - s * 0.9 + (i / 6) * (s * 1.0 - lift);
+      ctx.lineTo(x + (i % 2 ? s * 0.4 : -s * 0.4), yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function mix(a, b, t) {
@@ -1405,11 +1650,13 @@ function drawBench(w, h) {
   }
 
   // On a narrow canvas the banner above already says this, so it is dropped.
-  if ((S.blocked || orificeArea() < 1e-9) && !tightScene) {
+  const arrested = S.lock || S.vpos < 0.005;
+  if (arrested && !tightScene) {
     const V = Math.max(V_DEAD, V_CAP0 - A_P * S.x);
     const dV = Math.max(0, S.p) * V / effectiveBeta(S.p + P_AMB);
     const lx = box.x + box.w * 0.62, ly = box.y + box.h * 0.045;
-    label(ctx, 'FLOW ARRESTED', lx, ly, COL.alarm, 11);
+    label(ctx, S.lock ? 'FLOW ARRESTED — BOTH WAYS' : 'METERING PATH ARRESTED',
+          lx, ly, COL.alarm, 11);
     label(ctx, 'water squeezed by ' + (100 * dV / V).toFixed(3) + ' % of its volume',
           lx, ly + 15, COL.mist, 10);
   }
@@ -1527,10 +1774,13 @@ const READOUTS = {
   bench: [
     { id: 'press', k: 'Chamber pressure', cls: 'acc' },
     { id: 'strk',  k: 'Piston travel', cls: 'son' },
-    { id: 'dvol',  k: 'Water compressed', cls: '' },
+    { id: 'vlv',   k: 'Valve position', cls: '' },
     { id: 'disp',  k: 'Fluid expelled', cls: '' },
+    { id: 'vline', k: 'Line velocity', cls: '' },
+    { id: 'dvol',  k: 'Water compressed', cls: '' },
     { id: 'beta',  k: 'Effective bulk modulus', cls: '' },
     { id: 'stiff', k: 'Lock stiffness', cls: '' },
+    { id: 'surge', k: 'Closure surge', cls: '', wide: true },
     { id: 'engy',  k: 'Energy dissipated / returned', cls: '', wide: true }
   ]
 };
@@ -1599,28 +1849,67 @@ function updateReadouts() {
     set('disp',  u((S.vOut * 1000).toFixed(2), 'L'));
     set('beta',  u((bet / 1e9).toFixed(2), 'GPa'));
     set('stiff', u((k / 1e6).toFixed(1), 'MN/m'));
-    note('press', 'peak ' + (S.peakP / 1e5).toFixed(0) + ' bar');
-    note('strk',  'peak ' + (S.peakX * 1000).toFixed(2) + ' mm of 600');
+    note('press', 'peak ' + (S.peakP / 1e5).toFixed(0) + ' bar'
+                  + (S.cav ? '  ·  at vapour pressure' : ''));
+    // A held load creeps at whatever rate the seat leaks.
+    const creep = 60000 * Math.abs(S.q) / A_P;
+    note('strk',  (S.lock && S.p > 1e5)
+                    ? 'holding, creeping ' + creep.toFixed(2) + ' mm/min past the seat'
+                    : 'peak ' + (S.peakX * 1000).toFixed(2) + ' mm of 600');
     note('beta',  P.air > 0 ? P.air.toFixed(2) + ' % air at ambient' : 'gas-free seawater');
     note('stiff', 'natural frequency ' +
          (Math.sqrt(k / (P.dmass * 1000)) / (2 * Math.PI)).toFixed(1) + ' Hz');
+
+    const mA = meterArea();
+    set('vlv',   u((S.vpos * 100).toFixed(0), '%'));
+    set('vline', u((S.q / A_LINE).toFixed(2), 'm/s'));
+    note('vlv',  S.lock ? 'bypassed — port block shut'
+                        : 'flow area ' + (mA * 1e6).toFixed(2) + ' mm2'
+                          + (mA <= leakArea() * 1.02 && P.leak > 0 ? ' (on seat)' : ''));
+    note('vline', 'peak ' + S.peakVline.toFixed(2) + ' m/s'
+                  + (S.cav ? '  ·  CAVITATING' : ''));
+    note('disp', S.lock || S.vpos < 0.001
+                   ? (P.leak > 0 ? 'past the seat only' : 'sealed — nothing moves')
+                   : 'through the metering valve');
+
+    // A closure only makes a surge if it beats the line's own period, 2L/c.
+    const tPipe = 2 * lineLen() / C_WAVE;
+    const joukowsky = RHO * C_WAVE * S.peakVline;
+    if (S.peakVline < 0.05) {
+      set('surge', '&ndash;');
+      note('surge', 'No flow has been arrested yet — the port block shuts the line '
+                    + 'before the water in it ever moves.');
+    } else {
+      set('surge', u((S.peakSurge / 1e5).toFixed(0), 'bar') +
+                   '<span style="color:var(--dim);margin:0 8px">of</span>' +
+                   u((joukowsky / 1e5).toFixed(0), 'bar') +
+                   '<small style="margin-left:6px">Joukowsky bound</small>');
+      note('surge', 'Closing in ' + P.vclose.toFixed(0) + ' ms against a line period 2L/c of ' +
+                    (tPipe * 1000).toFixed(1) + ' ms — ' +
+                    (P.vclose / 1000 < tPipe * 2
+                      ? 'fast closure, so the column has nowhere to go and most of the bound appears'
+                      : 'slow closure, so the surge is relieved back down the line as it forms'));
+    }
 
     const ret = Math.max(0, S.eIn - S.eDiss);
     set('engy', u((S.eDiss / 1e3).toFixed(1), 'kJ') +
                 '<span style="color:var(--dim);margin:0 8px">/</span>' +
                 u((ret / 1e3).toFixed(1), 'kJ'));
-    const c = Math.sqrt(bet / RHO);
-    note('engy', 'Bounces: ' + S.bounces +
-                 '  ·  wave speed ' + c.toFixed(0) + ' m/s' +
-                 '  ·  Joukowsky at 1 m/s line change: ' +
-                 (RHO * c / 1e5).toFixed(0) + ' bar');
+    note('engy', 'Peak rebound ' + S.rebound.toFixed(3) + ' m/s'
+                 + (S.bolted ? '  ·  rod bolted, so the lock holds both ways'
+                             : '  ·  rod free, so the load can only be pushed off'));
   }
 
   // banner
   const b = document.getElementById('banner');
   let msg = '';
-  if (S.mode === 'bench' && (S.blocked || orificeArea() < 1e-9)) {
-    msg = S.blocked ? 'Ports blocked — hydraulic lock' : 'Metering valve shut — hydraulic lock';
+  if (S.mode === 'bench' && S.lock) {
+    msg = S.bolted ? 'Port block shut — locked in both directions'
+                   : 'Port block shut — holds in compression only, rod is free';
+  } else if (S.mode === 'bench' && S.vpos < 0.005) {
+    msg = P.leak > 0 ? 'Metering valve on its seat — leaking past at ' +
+                       (P.leak).toFixed(2) + ' %'
+                     : 'Metering valve shut — refill check still open';
   } else if (S.mode === 'landing' && S.rigid) {
     msg = 'Rigid legs — dampers bypassed';
   } else if (S.x > STROKE * 0.998) {
@@ -1651,7 +1940,15 @@ function fmtVal(c) {
 function buildControls() {
   const host = document.getElementById('controls');
   host.innerHTML = '';
+  let seen = null;
   for (const c of CONTROLS[S.mode]) {
+    if (c.group && c.group !== seen) {
+      seen = c.group;
+      const h = document.createElement('div');
+      h.className = 'ctl-group';
+      h.textContent = c.group;
+      host.appendChild(h);
+    }
     const row = document.createElement('div');
     row.className = 'ctl-row';
     const id = 'sl-' + c.id;
@@ -1696,9 +1993,18 @@ function buildTransport() {
     });
   } else {
     mk('Drop again', '', function () { reset(); S.running = true; runBtn.textContent = 'Pause'; });
-    const t = mk('Block ports', 'danger ' + (S.blocked ? 'on' : ''), function () {
-      S.blocked = !S.blocked;
-      t.classList.toggle('on', S.blocked);
+    const sh = mk(S.shut ? 'Open valve' : 'Shut valve', S.shut ? 'toggled' : '', function () {
+      S.shut = !S.shut;
+      sh.textContent = S.shut ? 'Open valve' : 'Shut valve';
+      sh.classList.toggle('toggled', S.shut);
+    });
+    const lk = mk('Port block', 'danger ' + (S.lock ? 'on' : ''), function () {
+      S.lock = !S.lock;
+      lk.classList.toggle('on', S.lock);
+    });
+    const bo = mk('Rod bolted', S.bolted ? 'toggled' : '', function () {
+      S.bolted = !S.bolted;
+      bo.classList.toggle('toggled', S.bolted);
     });
   }
 }
@@ -1721,7 +2027,9 @@ function buildSpeed() {
 
 function setMode(m) {
   S.mode = m;
-  S.blocked = false;
+  S.lock = false;
+  S.shut = false;
+  S.bolted = true;
   S.rigid = false;
   if (m === 'bench' && S.speed === 1) S.speed = 0.25;
   document.querySelectorAll('.mode').forEach(function (b) {
